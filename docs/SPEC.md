@@ -1,8 +1,8 @@
 # SPEC: Nook Memory — Universal Agent Memory Layer
 
-Status: Draft for review
+Status: Draft for review (second review round incorporated)
 Owner: Chris Lloyd (Nook)
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 ---
 
@@ -44,9 +44,28 @@ The data model is a typed property graph: generic `nodes` carry a `kind` discrim
 | Package | `@nook/mem`, binary `mem` | Scoped under existing Nook npm presence |
 | Output | JSON to stdout by default; `--human` flag for readable output | Agent-first per cli-tool-creator conventions |
 | Errors | stderr; exit 0 success, 1 user error, 2 system error | Agents branch on exit codes |
-| Migrations | Numbered SQL files applied at startup, tracked in `schema_migrations` | Simplest thing that works |
+| Migrations | Numbered SQL files applied at startup, tracked in `schema_migrations` | Simplest thing that works. Check-and-apply runs inside one `BEGIN IMMEDIATE` transaction so concurrent invocations (e.g. Hermes heartbeat + a Claude Code session hitting a fresh DB) serialize: the blocked process re-checks after acquiring the lock and no-ops |
 
 The CLI never prompts interactively. All input via args, flags, or stdin.
+
+IDs are opaque TEXT keys: the CLI performs no ULID format validation on id arguments — any id not present in `nodes` is `NOT_FOUND`.
+
+### 2.1 Config keys
+
+`memory.jsonc` is optional; every key has a default. Precedence: **flag > config > default**. Unknown keys produce a warning on stderr (forward compatibility), never an error; a malformed config file is a system error (exit 2).
+
+| Key | Default | Used by |
+|---|---|---|
+| `query.weights.fts` | tuned default | §5.2 scoring (w1) |
+| `query.weights.edge` | tuned default | §5.2 scoring (w2) |
+| `query.weights.recency` | tuned default | §5.2 scoring (w3) |
+| `query.hop_decay` | tuned default | §5.2 scoring |
+| `query.default_limit` | `20` | `query` |
+| `suggest.windows` | same-day + next-day | §5.1 suggester, §5.3 health-correlations (shared) |
+| `chunk.budget_tokens` | `3000` | source auto-chunking |
+| `purge.default_days` | `30` | `purge` |
+| `backup.dest` | `$XDG_DATA_HOME/nook/backups/` | `backup` |
+| `backup.keep` | `14` | `backup` |
 
 ---
 
@@ -87,7 +106,7 @@ CREATE TABLE edges (
   dst        TEXT NOT NULL REFERENCES nodes(id),
   rel        TEXT NOT NULL,                  -- registered relation, see §3.3
   weight     REAL NOT NULL DEFAULT 1.0,
-  origin     TEXT NOT NULL,                  -- 'agent' | 'wikilink' | 'suggested' | 'user'
+  origin     TEXT NOT NULL,                  -- 'direct' | 'wikilink' | 'suggested' (mechanism, see §5.1)
   created_at TEXT NOT NULL,
   PRIMARY KEY (src, dst, rel)
 );
@@ -110,14 +129,19 @@ CREATE TABLE link_suggestions (
   status     TEXT NOT NULL DEFAULT 'pending',-- 'pending' | 'accepted' | 'rejected'
   created_at TEXT NOT NULL,
   PRIMARY KEY (src, dst)
+  -- suggestions are direction-free: rows are stored canonically with src < dst
+  -- (ULID order), enforced on insert, so rejecting (A,B) also covers (B,A)
 );
 
 CREATE VIRTUAL TABLE nodes_fts USING fts5(
-  title, body, tags,
-  content='', tokenize='porter unicode61'
+  node_id UNINDEXED, title, body, tags,
+  tokenize='porter unicode61'
 );
--- nodes_fts kept in sync by application code on write (contentless table;
--- tags denormalized into the index for tag-aware ranking)
+-- Plain contentful FTS table kept in sync by application code on write.
+-- Contentful (not content='') deliberately: normal UPDATE/DELETE, snippet()
+-- works, and node_id joins by persistent id (no rowid coupling, which VACUUM
+-- would renumber). Body duplication is irrelevant at personal scale.
+-- Tags denormalized into the index for tag-aware ranking.
 
 CREATE TABLE schema_migrations (
   version    INTEGER PRIMARY KEY,
@@ -128,9 +152,9 @@ CREATE TABLE schema_migrations (
 Notes:
 
 - `occurred_at` vs `created_at` matters for health and finance: you log yesterday's meal today.
-- For time-anchored kinds, `occurred_at` is the canonical query timestamp: events set `occurred_at = starts_at` on write (enforced by the CLI), so the indexed column serves "what's happening today" queries and payload time fields (`starts_at`, `ends_at`) remain detail, never promoted.
-- Soft delete keeps edges intact for audit; `mem purge` hard-deletes nodes soft-deleted > N days (default 30) and cascades edges/tags/suggestions.
-- Rejected suggestions are retained so the suggester never re-proposes the same pair.
+- For time-anchored kinds, `occurred_at` is the canonical query timestamp: the CLI maintains `occurred_at = starts_at` for events as an **invariant** — it applies on `add` and re-fires on any update that changes `starts_at` (a rescheduled event moves with it). Passing `--occurred-at` explicitly on an event (add or update) is `INVALID_ARGS`; `starts_at` is the single source of truth. Payload time fields (`starts_at`, `ends_at`) remain detail, never promoted.
+- Soft delete keeps edges intact for audit; `mem restore <id>` reverses it (clears `deleted_at`, re-indexes). Soft-deleted nodes are otherwise immutable: `update`/`link`/`unlink`/`tag`/`untag`/`delete` against one fail `NOT_FOUND`. Rule: deleted = gone, except `get` and `restore`. `mem purge` hard-deletes nodes soft-deleted > N days (default 30) and cascades edges/tags/suggestions; purged nodes cannot be restored.
+- Rejected suggestions are retained so the suggester never re-proposes the same pair (in either direction — see the canonical `src < dst` ordering above).
 
 ### 3.2 Why one generic node table
 
@@ -148,18 +172,18 @@ Expect the promoted set to stay in the single digits permanently; at personal da
 
 Closed set, extended only via spec change. Free-form `rel` values would fragment traversal.
 
-| rel | Meaning | Typical src → dst |
-|---|---|---|
-| `references` | Body wikilink or explicit citation | any → any |
-| `relates_to` | General association (default for suggestions) | any → any |
-| `derived_from` | Distillation provenance | insight → source |
-| `about` | Subject linkage | note/event/visit → person/project |
-| `part_of` | Containment | task → project, list_item → list, chunk → source |
-| `blocks` | Dependency | task → task |
-| `follows` | Temporal/causal sequence | visit → visit, event → event |
-| `evidences` | Data supporting a correlation/insight | symptom/meal/lab_result → insight |
+| rel | Symmetric | Meaning | Typical src → dst |
+|---|---|---|---|
+| `references` | no | Body wikilink or explicit citation | any → any |
+| `relates_to` | **yes** | General association (default for suggestions) | any → any |
+| `derived_from` | no | Distillation provenance | insight → source |
+| `about` | no | Subject linkage | note/event/visit → person/project |
+| `part_of` | no | Containment | task → project, list_item → list, chunk → source |
+| `blocks` | no | Dependency | task → task |
+| `follows` | no | Temporal/causal sequence | visit → visit, event → event |
+| `evidences` | no | Data supporting a correlation/insight | symptom/meal/lab_result → insight |
 
-Edges are directed; traversal treats them as bidirectional with direction available for display.
+Edges are directed; traversal treats them as bidirectional with direction available for display. For **symmetric** relations the direction carries no meaning, so the CLI canonicalizes `src < dst` (ULID order) on write — inserting the reverse of an existing symmetric edge correctly fails `DUPLICATE_EDGE` instead of double-counting the association.
 
 ---
 
@@ -190,11 +214,13 @@ Each kind = a TypeBox payload schema + optional status vocabulary + capture conv
 | `transaction` | — | `{ amount: number, currency: 'CAD', direction: 'income'\|'expense', category?: string, vendor?: string }` |
 | `subscription` | `active\|cancelled` | `{ amount: number, currency: 'CAD', cadence: 'monthly'\|'yearly', vendor: string, renews_at?: string }` |
 
-Transcripts: full raw transcript lives on the `source` body if small; long transcripts are **auto-chunked by the CLI on `add`** — when a source body exceeds the chunk budget, `chunk` nodes are created (cut on paragraph/speaker-turn boundaries, greedily packed to ~3k tokens, sequential `position`) with `part_of` edges back to the source, which retains the full body. Agents never chunk manually; the add response reports `chunks_created`.
+**Default statuses.** Every kind with a status vocabulary declares a default, applied on `add` when `--status` is omitted: `project → active`, `task → open`, `event → planned`, `idea → raw`, `list_item → open`, `subscription → active`. Status is therefore never null for statusful kinds; statusless kinds always have null status, and passing `--status` to one is `INVALID_STATUS`.
+
+Transcripts: full raw transcript lives on the `source` body if small; long transcripts are **auto-chunked by the CLI on `add`** — when a source body exceeds the chunk budget, `chunk` nodes are created (cut on paragraph/speaker-turn boundaries, greedily packed to ~3k tokens, sequential `position`) with `part_of` edges back to the source, which retains the full body. Chunk titles follow the deterministic convention `<source title> (n/total)` — self-describing in result lists and unique, so title-wikilinks stay resolvable. Both the source body and chunk bodies are FTS-indexed; query-time dedup keeps results clean (§5.2). Agents never chunk manually; the add response reports `chunks_created`.
 
 **Task scoping.** `task` nodes are personal/life tasks, cross-project commitments, and project-level milestones — things that link to people, money, health, and ideas. Fine-grained implementation tasks for code projects stay in their repo's own task system (`.claude/tasks/`); the `project` node's `repo` field is the bridge. Duplicating dev-task churn into the graph is prohibited noise.
 
-**Archival cascade.** Setting a `project` to `archived` transitions its open `part_of` tasks to `dropped` in the same operation (CLI-enforced). Combined with terminal-state exclusion in `query` (§5.2), stale open tasks from dead projects cannot exist, and closed work persists for history and reports without polluting retrieval.
+**Archival cascade.** Setting a `project` to `archived` transitions its non-terminal `part_of` tasks (`open` **and** `in_progress`) to `dropped` in the same operation (CLI-enforced); terminal tasks (`done`, `dropped`) are untouched. The cascade is one hop — direct `part_of` edges only, no transitive descent. Combined with terminal-state exclusion in `query` (§5.2), stale open tasks from dead projects cannot exist, and closed work persists for history and reports without polluting retrieval.
 
 ### 4.2 Adding a kind
 
@@ -211,19 +237,24 @@ Transcripts: full raw transcript lives on the `source` body if small; long trans
 
 ### 5.1 Edge creation (three channels)
 
-1. **Explicit at capture.** `mem add` accepts `--link <id>:<rel>` (repeatable). The skill instructs agents to always attempt at least one link on capture: search first (`mem query`), then add with links to what was found. Capture-time linking is the primary densification mechanism.
-2. **Wikilinks.** Body text may contain `[[<id>]]` or `[[<exact title>]]`. On write, the CLI resolves them to `references` edges (origin `wikilink`). Unresolved title links are reported in the JSON response under `unresolved_links` — not an error.
-3. **Suggestions.** `mem suggest` (run ad hoc, or via cron/Hermes heartbeat) computes candidate pairs and writes `link_suggestions`. v1 scoring: FTS more-like-this (top terms of node as query) + shared-tag overlap + same-kind temporal proximity for health kinds. `mem suggest --review` emits pending suggestions as JSON; agents accept with `mem link` (origin `suggested`) or `mem suggest reject <src> <dst>`.
+Edge `origin` records the **mechanism** that created the edge — `direct`, `wikilink`, or `suggested` — never the actor (the CLI cannot distinguish a human at a terminal from an agent invoking the same binary, so actor identity is unknowable and not recorded).
+
+1. **Explicit at capture.** `mem add` accepts `--link <id>:<rel>` (repeatable), and `mem link` creates edges after the fact; both write origin `direct`. The skill instructs agents to always attempt at least one link on capture: search first (`mem query`), then add with links to what was found. Capture-time linking is the primary densification mechanism.
+2. **Wikilinks.** Body text may contain `[[<id>]]` or `[[<exact title>]]`. On write, the CLI resolves them to `references` edges (origin `wikilink`). On body **update**, wikilinks are re-resolved and diffed against existing `origin='wikilink'` edges only: new links add edges, vanished links remove theirs; `direct`/`suggested` edges are never touched. A wikilink duplicating an existing edge (same src/dst/rel) is a silent no-op that keeps the existing origin. Unresolved title links are reported in the JSON response under `unresolved_links` — not an error, and **not persisted**: unlike Obsidian, there are no forward references in v1 — creating the target later does not materialize the edge. The response surfaces the miss while the agent is still in-context, which is when repair is cheapest; persisted forward references are deferred until real loss is observed.
+3. **Suggestions.** `mem suggest` (run ad hoc, or via cron/Hermes heartbeat) computes candidate pairs and writes `link_suggestions` (canonical `src < dst`). v1 scoring: FTS more-like-this (top terms of node as query) + shared-tag overlap + **cross-kind** temporal proximity within the health kinds (different-kind pairs — meal↔symptom, etc. — inside the same-day/next-day windows shared with the health-correlations report via `suggest.windows`; same-kind proximity is deliberately excluded, as meal↔meal adjacency is daily noise). `mem suggest review` emits pending suggestions as JSON; `mem suggest accept <src> <dst>` creates the edge (origin `suggested`, rel `relates_to`, weight 1.0 — the suggestion's score stays on the suggestion row as provenance) and marks the row accepted; `mem suggest reject <src> <dst>` marks it rejected.
 
 ### 5.2 Query algorithm
 
-`mem query <text>` is retrieval + graph expansion, not bare search:
+`mem query [<text>]` is retrieval + graph expansion, not bare search:
 
 1. FTS5 match → top N seed nodes (BM25, weighted title > tags > body).
 2. Expand 1–2 hops over edges from seeds (recursive CTE), depth configurable via `--hops` (default 1, max 3).
-3. Score each result: `bm25_norm × w1 + edge_weight_path × w2 × hop_decay^hops + recency_decay(occurred_at|created_at) × w3`. Weights in config with tuned defaults.
-4. Filters compose: `--kind`, `--tag`, `--status`, `--since/--until` (applied to `occurred_at` falling back to `created_at`), `--limit`. By default, nodes in terminal states (`task: done/dropped`, `project: archived`, `event: cancelled`, `idea: shelved`, soft-deleted anything) are excluded from results and from graph expansion seeds; `--include-closed` lifts this. Closed nodes remain fully visible to `get`, `related`, and reports.
-5. Output: JSON array of `{ id, kind, title, snippet, score, hops, via }` where `via` names the edge path for expanded hits — agents can explain *why* a result surfaced.
+3. Score each result: `bm25_norm × w1 + edge_weight_path × w2 × hop_decay^hops + recency_decay(occurred_at|created_at) × w3`. Weights in config (§2.1) with tuned defaults.
+4. Filters compose: `--kind`, `--tag`, `--status`, `--since/--until` (applied to `occurred_at` falling back to `created_at`), `--limit` (default 20, from `query.default_limit`). By default, nodes in terminal states (`task: done/dropped`, `project: archived`, `event: cancelled`, `idea: shelved`) are excluded from results and from graph expansion seeds, but remain **traversable as intermediate hops** — archiving a hub project hides it without severing the paths through it; `via` may name a closed node. Soft-deleted nodes are excluded everywhere, including traversal. `--include-closed` lifts the terminal-state exclusion (never the soft-delete one). Closed nodes remain fully visible to `get`, `related`, and reports.
+5. **Chunk dedup.** When a chunked source and any of its chunks both match, the source row and all but the highest-scoring chunk are dropped — one result per document. The surviving chunk carries its source id (via its `part_of` edge) so agents can widen to the full source.
+6. Output: JSON array of `{ id, kind, title, snippet, score, hops, via }` where `via` names the edge path for expanded hits — agents can explain *why* a result surfaced.
+
+`<text>` is optional. Without it, `query` is a pure filtered **listing**: the same filters compose, ordered by `occurred_at` falling back to `created_at`, descending; `score` is null and no snippet highlighting applies. This serves enumeration ("open tasks", "meals this week") and the skill's search-before-add discipline with one command and one output contract.
 
 `mem related <id>` is pure graph neighborhood (no FTS): ranked neighbors at ≤ `--hops`, with shared-tag nodes appended as weak implicit relations. This is the "open the local graph" gesture from Obsidian.
 
@@ -236,7 +267,7 @@ The compounding property: seeds are roughly stable over time, but expansion reac
 - `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor.
 - `finance [--month]` — income vs expenses by category, subscription roll-up with projected monthly burn.
 - `tasks [--project]` — open/in-progress by due date and priority.
-- `health-correlations [--since]` — co-occurrence counts between symptom kinds and meal items/tags within configurable windows (default same-day and next-day). Output is explicitly labeled co-occurrence, not causation; agents interpret.
+- `health-correlations [--since]` — co-occurrence counts between symptom kinds and meal items/tags within configurable windows (`suggest.windows`, §2.1 — shared with the suggester; default same-day and next-day). Output is explicitly labeled co-occurrence, not causation; agents interpret.
 
 Reports live in `src/reports/` one file per report; adding a report = MINOR bump.
 
@@ -251,14 +282,17 @@ mem get <id> [--with-edges] [--with-body]
 mem update <id> [--title] [--body|--body-stdin] [--payload-merge <json>]
         [--status] [--occurred-at]
 mem delete <id>                # soft delete
+mem restore <id>               # reverse a soft delete (NOT_FOUND if purged)
 mem purge [--older-than <days>]
 mem link <src> <dst> <rel> [--weight <n>]
 mem unlink <src> <dst> <rel>
 mem tag <id> <tag>... | mem untag <id> <tag>...
-mem query <text> [--kind]... [--tag]... [--status] [--since] [--until]
-        [--hops <0-3>] [--limit <n>] [--include-closed]
+mem query [<text>] [--kind]... [--tag]... [--status] [--since] [--until]
+        [--hops <0-3>] [--limit <n>] [--include-closed]   # no <text> = filtered listing
 mem related <id> [--hops <1-3>] [--limit <n>]
-mem suggest [--review | reject <src> <dst>] [--limit <n>]
+mem suggest [--limit <n>]      # compute candidate pairs
+mem suggest review [--limit <n>]
+mem suggest accept <src> <dst> | mem suggest reject <src> <dst>
 mem report <name> [report-specific flags] [--human]
 mem kinds [<kind>]             # contract self-discovery
 mem stats                      # node/edge/tag counts by kind, suggestion backlog
@@ -267,7 +301,9 @@ mem import <jsonl>             # restore from an export
 mem backup [--dest <dir>] [--keep <n>]   # VACUUM INTO timestamped snapshot, rotate to n (default 14)
 ```
 
-Conventions (per cli-tool-creator): JSON to stdout, errors to stderr, exit 0/1/2, no prompts, `--human` for readable output. `--payload-merge` is a shallow merge then full-schema revalidation. Arg parsing via CAC (existing standard); no other runtime dependencies beyond TypeBox/AJV/CAC/ulid.
+Conventions (per cli-tool-creator): JSON to stdout, errors to stderr, exit 0/1/2, no prompts, `--human` for readable output. `--payload-merge` follows RFC 7386 merge-patch semantics: shallow merge where **null deletes the key**, then full-schema revalidation — optional payload fields are clearable, not write-once. Arg parsing via CAC (existing standard); no other runtime dependencies beyond TypeBox/AJV/CAC/ulid.
+
+`export` includes soft-deleted nodes (with their `deleted_at`) — an export is a faithful copy of everything not yet purged. `import` runs as a single transaction in two passes (all nodes, then all edges/tags), so in-file ordering never matters; an edge whose endpoint exists in neither the file nor the target DB is skipped and counted in the response (`edges_skipped`), not an error.
 
 ### 6.1 Backups
 
@@ -314,22 +350,22 @@ Contract-level TDD at the CLI boundary. Each command is a black box: arguments +
 - **Plumbing (scaffold, migrations runner) is tested alongside, not test-first.**
 - Vitest, fully local, no API keys, no skips.
 
-The contract suite is the stability guarantee the skill README relies on: any change to a command's output shape is BREAKING and versioned accordingly.
+The contract suite is the stability guarantee the skill README relies on. Versioning rule (consistent with §4.2): **additive** changes — new keys in a response, new commands, new kinds, new reports — are MINOR; removing, renaming, retyping, or changing the meaning of anything existing is BREAKING. Agents parsing JSON tolerate new keys; they break on everything else.
 
 ## 9. Phasing
 
-**Phase 1 — Core store + CLI.** Schema, migrations, kind registry, `add/get/update/delete/link/tag/query (FTS only, --hops 0)/kinds/stats/export/import/backup`. Skill README. Hermes capture flows live.
+**Phase 1 — Core store + CLI.** Schema, migrations, kind registry, `add/get/update/delete/restore/link/tag/query (FTS only, --hops 0)/kinds/stats/export/import/backup`. Skill README. Hermes capture flows live.
 
 Implementation order — one item per Claude Code session, each starting from failing contract tests (§8) and ending with passing tests, a changelog entry, and a commit:
 
 1. Repo scaffold: Bun project, CAC entry point, config loading (XDG paths), migrations runner + `schema_migrations`.
 2. Migration 001: full DDL from §3.1, pragmas, indexes.
 3. Kind registry: TypeBox schemas for all §4.1 kinds, AJV validation boundary, `mem kinds`.
-4. FTS sync layer: contentless `nodes_fts` write-through on node create/update/delete, tags denormalized.
+4. FTS sync layer: contentful `nodes_fts` write-through on node create/update/delete/restore, tags denormalized.
 5. `mem add` end-to-end: payload validation, tags, `--link`, `occurred_at` conventions (event `starts_at` mirror), source auto-chunking (chunker per TDD §5.1).
-6. `mem get` / `mem update` (payload-merge + revalidation) / `mem delete` / `mem purge`.
+6. `mem get` / `mem update` (merge-patch + revalidation) / `mem delete` / `mem restore` / `mem purge`.
 7. `mem link` / `unlink` / `tag` / `untag`, including the project-archival task cascade.
-8. `mem query` (FTS-only, `--hops 0`): filters, terminal-state exclusion, `--include-closed`, BM25 weighting, `--human` markdown output.
+8. `mem query` (FTS-only, `--hops 0`): filters, no-text listing mode, terminal-state exclusion, `--include-closed`, BM25 weighting, chunk dedup, `--human` markdown output.
 9. `mem stats` / `mem export` / `mem import` / `mem backup` (VACUUM INTO + rotation).
 10. Skill README per §7; tag v0.1.0.
 
@@ -347,6 +383,8 @@ Each phase ships with tests (Vitest, no API keys required — the layer is fully
 2. **Backups are database-file snapshots** via `mem backup` (`VACUUM INTO`), not JSONL exports. See §6.1.
 3. **`--human` query output is a markdown list**: title, kind, id, snippet, and edge path (`via`) for hop-expanded results.
 4. **Chunk boundaries: paragraph/speaker-turn cuts, greedily packed to ~3k tokens per chunk.** Semantically coherent edges with bounded size.
-5. **No server process.** The CLI is the entire runtime; SQLite is embedded. Concurrency between agents handled by WAL + `busy_timeout`.
+5. **No server process.** The CLI is the entire runtime; SQLite is embedded. Concurrency between agents handled by WAL + `busy_timeout`; the migrations runner serializes via `BEGIN IMMEDIATE` (§2).
+
+A second review round (2026-06-10) resolved 21 further issues in place: contentful FTS (§3.1), chunk dedup at query (§5.2), mechanism-based edge origins + `suggest accept` (§5.1), per-kind default statuses (§4.1), no-text listing (§5.2), `restore` + soft-delete immutability (§3.1), wikilink edge lifecycle and forward-link limitation (§5.1), non-terminal archival cascade (§4.1), event mirror as invariant (§3.1), export/import fidelity (§6), traversal through closed nodes (§5.2), canonical pair identity (§3.3), migration locking (§2), cross-kind suggest heuristic (§5.1), additive-is-MINOR versioning (§8), opaque IDs (§2), chunk titles (§4.1), weight-1.0 channels (§5.1), merge-patch nulls (§6), config enumeration (§2.1), and forward wikilinks as a stated v1 limitation (§5.1).
 
 No open questions remain. Spec is ready for TDD / Phase 1 task breakdown.
