@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-06-11
+
+Phase 1: core store + CLI. Skill README shipped (#10); manual acceptance gate passed — a fresh agent session given only the README and the binary captured a linked note (creating an anchor when search found nothing) and retrieved it by query and by get --with-edges, unaided.
+
 ### Added
 
 - Portability (#9): `mem export` JSONL (soft-deleted included with their deleted_at — a faithful copy of everything not yet purged; `--kind`/`--since` filters), `mem import` (single transaction, two passes so file order never matters; existing ids skipped wholly; edges with missing endpoints skipped and counted as `edges_skipped`; FTS rebuilt for live nodes), and `mem backup` (`VACUUM INTO` timestamped snapshots with `--keep` rotation, dest from flag > config > `<data>/backups`). `mem stats` now counts live nodes per kind and reports soft-deleted under a separate `deleted` key — resolving the one open PRD question; SPEC §6 and TDD §2.3 updated.
