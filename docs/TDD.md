@@ -76,6 +76,10 @@ Returned by `add`, `get`, `update`:
 | `tag` / `untag` | `{ "id", "tags": [...] }` (full tag set after the operation) |
 | `query` | JSON array of `{ "id", "kind", "title", "snippet", "score", "hops", "via" }`. FTS seeds carry `hops:0`, `via:null`; hop-expanded hits carry `hops ≥ 1`, `snippet:null`, and `via`: array of `"<src> -<rel>-> <dst>"` strings naming each traversed edge in path order (stored direction). `score` is a positive number; tests never assert its value, only presence and ordering. No-text listing mode: `score` and `snippet` are `null`, ordering is `occurred_at`→`created_at` descending. *(Amended in Phase 2: hops/via were placeholder `0`/`null` in Phase 1.)* |
 | `related` | array of `{ "id", "kind", "title", "hops", "via" }` — no snippet or score. Edge neighbors carry `hops ≥ 1` and the `via` edge path; shared-tag weak relations carry `hops:null` and `via:["shared-tag:<tag>"]`. |
+| `suggest` | `{ "created": n, "pending": n }` |
+| `suggest review` | array of `{ "src", "dst", "score", "reason", "created_at" }` — pending rows only, score-descending; `reason` e.g. `temporal-proximity:same-day`, `shared-tags:<tag>`, `fts-similarity` |
+| `suggest accept` | `{ "src", "dst", "status": "accepted", "edge": { "src", "dst", "rel", "weight", "origin" } }` — src/dst canonical (`src < dst`) regardless of argument order |
+| `suggest reject` | `{ "src", "dst", "status": "rejected" }` — canonical likewise |
 | `kinds` | array of `{ "kind", "statuses": [...] \| null, "default_status": <s> \| null, "payload_schema": <JSON Schema> }`; `kinds <kind>` returns the single object |
 | `stats` | `{ "nodes": { "<kind>": n, ... }, "edges": n, "tags": n, "suggestions_pending": n, "deleted": n }` — kind counts cover live nodes only; soft-deleted nodes appear solely in `deleted` |
 | `export` | JSONL to stdout: one `{ "node": {...full incl. body, deleted_at...}, "edges_out": [...], "tags": [...] }` per line; soft-deleted nodes included |
@@ -279,6 +283,24 @@ Not contract-tested. Manual gate: a fresh Claude Code session given only the REA
 
 **T12.4 soft-deleted.** Deleted root → `NOT_FOUND`; deleted nodes absent as neighbors and as weak relations.
 
+### Item 13 — suggester (Phase 2)
+
+Per §6: candidate presence/absence and lifecycle only — never score values.
+
+**T13.1 cross-kind temporal proximity.** Standard graph (meal `<id:6>` and symptom `<id:7>` same day) → `suggest` creates ≥ 1; `review` lists the canonical pair with a `same-day` reason.
+
+**T13.2 windows and the same-kind exclusion.** meal↔meal same-day never proposed; meal → next-day symptom proposed (`next-day` reason); two days out proposed by no window; symptom↔symptom adjacent days also excluded.
+
+**T13.3 shared-tag overlap.** Two live notes sharing a tag → proposed, reason `shared-tags:<tag>`; no-overlap nodes and soft-deleted nodes are never candidates.
+
+**T13.4 FTS similarity.** Titles sharing ≥ 2 distinct terms → proposed, reason `fts-similarity`; one shared common word is not similarity; chunks never participate (sibling titles are mechanically near-identical and `part_of` already binds the family).
+
+**T13.5 existing edge suppresses.** A pair connected by any edge (either direction) is not proposed; `created:0` when nothing else qualifies.
+
+**T13.6 accept.** With **reversed arguments**: edge `{src, dst, rel:"relates_to", weight:1.0, origin:"suggested"}` created on the canonical pair, row flipped (gone from `review`, `suggestions_pending` decrements), re-running `suggest` does not re-propose (the edge now suppresses). Unknown pair → `NOT_FOUND`.
+
+**T13.7 reject.** With reversed arguments: row rejected; re-running `suggest` never re-proposes the pair in either direction; no edge appears.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`
@@ -306,6 +328,6 @@ Not contract-tested. Manual gate: a fresh Claude Code session given only the REA
 
 ---
 
-## 6. Deferred (Phase 2 ranking & suggest)
+## 6. Ranking & suggest constraints (Phase 2 — now shipped as Items 11–13)
 
-Written after Phase 1 ships and real capture data exists. Constraints already fixed: ordering-property assertions only; suggestion tests assert candidate presence/absence and that rejected pairs are never re-proposed — never score values.
+Ordering-property assertions only; suggestion tests assert candidate presence/absence and that rejected pairs are never re-proposed — never score values. Scores, weights, decay curves, and the similarity threshold are tunables, not contracts.

@@ -17,6 +17,8 @@ mem update <id> [--title t] [--body md] [--payload-merge json] [--status s]
 mem link <src> <dst> <rel>   |   mem unlink <src> <dst> <rel>
 mem tag <id> <t>...          |   mem untag <id> <t>...
 mem delete <id>              |   mem restore <id>
+mem suggest [--limit n]      # compute link suggestions (run ad hoc or on a heartbeat)
+mem suggest review [--limit n] | mem suggest accept <src> <dst> | mem suggest reject <src> <dst>
 mem kinds [kind]   # payload contracts, statuses, defaults — self-discover here
 ```
 

@@ -18,6 +18,12 @@ import {
   importCommand,
 } from "./commands/portability";
 import { statsCommand } from "./commands/stats";
+import {
+  suggestAcceptCommand,
+  suggestCommand,
+  suggestRejectCommand,
+  suggestReviewCommand,
+} from "./commands/suggest";
 import type { CommandResult, Context } from "./context";
 import { ConfigError, loadConfig } from "./config";
 import { parseLinkFlag } from "./edges";
@@ -253,6 +259,50 @@ export async function runCommand(
           stdout = opts.human ? renderHuman(hits) : JSON.stringify(hits);
         } finally {
           db.close();
+        }
+      }
+    );
+  cli
+    .command(
+      "suggest [action] [src] [dst]",
+      "compute / review / accept / reject link suggestions"
+    )
+    .option("--limit <n>", "max suggestions")
+    .action(
+      (
+        action: string | undefined,
+        src: string | undefined,
+        dst: string | undefined,
+        opts: { limit?: string }
+      ) => {
+        const limit = opts.limit === undefined ? undefined : Number(opts.limit);
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+          throw new UserError(
+            "INVALID_ARGS",
+            "--limit must be a positive integer"
+          );
+        }
+        if (action === undefined) {
+          withDb((db) => suggestCommand(db, ctx, config, limit))();
+        } else if (action === "review") {
+          withDb((db) => suggestReviewCommand(db, limit))();
+        } else if (action === "accept" || action === "reject") {
+          if (src === undefined || dst === undefined) {
+            throw new UserError(
+              "INVALID_ARGS",
+              `suggest ${action} expects <src> <dst>`
+            );
+          }
+          withDb((db) =>
+            action === "accept"
+              ? suggestAcceptCommand(db, ctx, src, dst)
+              : suggestRejectCommand(db, src, dst)
+          )();
+        } else {
+          throw new UserError(
+            "INVALID_ARGS",
+            `unknown suggest action "${action}"`
+          );
         }
       }
     );
