@@ -4,6 +4,8 @@
 
 ### Added
 
+- Kind registry (#3): all 18 SPEC §4.1 kinds as TypeBox schemas (one module per kind, explicit registry map) with status vocabularies and per-kind default statuses. `mem kinds [<kind>]` exposes the contract as JSON Schema; unknown kind is `UNKNOWN_KIND` (exit 1). Payload schemas are strict (`additionalProperties: false`): unknown payload fields will fail validation at `add` rather than being silently stored.
+
 - Walking skeleton (#2): in-process `runCommand(argv, ctx)` contract harness with injected Context (deterministic clock/ids per TDD §1) plus a real-binary smoke suite.
 - Migrations runner: numbered SQL files, `schema_migrations` tracking, check-and-apply inside `BEGIN IMMEDIATE`; bounded retry on the delete→WAL journal-mode switch (SQLite skips the busy handler on that path, so concurrent first runs raced without it).
 - Migration 001: full SPEC §3.1 DDL — nodes (with STORED `amount`/`due_at` generated columns), edges, tags, link_suggestions, contentful FTS5 `nodes_fts`, indexes.

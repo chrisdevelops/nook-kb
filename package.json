@@ -20,6 +20,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.49",
     "cac": "^7.0.0",
     "ulid": "^3.0.2"
   }

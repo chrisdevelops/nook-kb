@@ -1,8 +1,21 @@
 import { cac } from "cac";
 import type { CommandResult, Context } from "./context";
 import { ConfigError, loadConfig } from "./config";
+import { UserError } from "./errors";
+import { KINDS } from "./kinds";
 import { openStore } from "./store";
 import type { Db } from "./sqlite";
+
+function kindContract(name: string) {
+  const def = KINDS[name];
+  if (!def) throw new UserError("UNKNOWN_KIND", `unknown kind "${name}"`);
+  return {
+    kind: name,
+    statuses: def.statuses,
+    default_status: def.defaultStatus,
+    payload_schema: def.payload,
+  };
+}
 
 function errorJson(code: string, e: unknown): string {
   return JSON.stringify({
@@ -47,6 +60,15 @@ export async function runCommand(
   }
 
   const cli = cac("mem");
+  cli
+    .command("kinds [kind]", "contract self-discovery")
+    .action((kind?: string) => {
+      stdout = JSON.stringify(
+        kind === undefined
+          ? Object.keys(KINDS).map(kindContract)
+          : kindContract(kind)
+      );
+    });
   cli.command("stats", "node/edge/tag counts by kind").action(() => {
     const db = openStore(ctx.dbPath, ctx.clock);
     try {
@@ -60,8 +82,14 @@ export async function runCommand(
     cli.parse(["mem-node", "mem", ...argv], { run: false });
     await cli.runMatchedCommand();
   } catch (e) {
-    stderr = errorJson("SYSTEM", e);
-    exitCode = 2;
+    stdout = "";
+    if (e instanceof UserError) {
+      stderr = errorJson(e.code, e);
+      exitCode = 1;
+    } else {
+      stderr = errorJson("SYSTEM", e);
+      exitCode = 2;
+    }
   }
 
   if (warnings.length > 0) {
