@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Wikilink resolution (#11): body `[[<id>]]` and `[[Exact Title]]` resolve to `references` edges (origin `wikilink`) on add and on body update — title matching is case-insensitive exact against live nodes; ambiguous, unknown, and soft-deleted targets land in the new `unresolved_links` response field (reported, never persisted — creating the target later does not materialize an edge). Body updates diff origin-scoped: vanished links remove only `wikilink` edges, `direct`/`suggested` are never touched, and a wikilink duplicating an existing edge is a silent no-op keeping its origin. The resolver is the second pure-function contract (TDD §5.2, T-W.1–T-W.7); `links_created` in the add response gains wikilink entries.
+
 ## [0.1.0] — 2026-06-11
 
 Phase 1: core store + CLI. Skill README shipped (#10); manual acceptance gate passed — a fresh agent session given only the README and the binary captured a linked note (creating an anchor when search found nothing) and retrieved it by query and by get --with-edges, unaided.

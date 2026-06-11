@@ -62,7 +62,7 @@ Returned by `add`, `get`, `update`:
 
 - `body` is omitted by default; `body_length` (chars) always present. `get --with-body` and `add`/`update` responses for nodes whose body was just set include `"body"`.
 - `get --with-edges` adds: `"edges": { "out": [{ "dst", "rel", "weight", "origin", "created_at" }], "in": [{ "src", "rel", "weight", "origin", "created_at" }] }`.
-- `add` additionally returns `"links_created"`: array of `{ "dst", "rel" }` (from `--link` flags; wikilink-origin entries join in Phase 2), and `"chunks_created"`: number (sources only, 0 otherwise).
+- `add` additionally returns `"links_created"`: array of `{ "dst", "rel" }` (`--link` flags first, then wikilink-origin entries), `"unresolved_links"`: array of wikilink targets that did not resolve (SPEC §5.1), and `"chunks_created"`: number (sources only, 0 otherwise).
 
 ### 2.3 Other command responses (stdout, exit 0)
 
@@ -145,7 +145,7 @@ Numbered `T<item>.<n>` matching SPEC §9 Phase 1 implementation order. Each impl
 
 **T5.1 minimal add.**
 Input: `add note --title "Bun macros are compile-time"`
-Output: full node object — `kind:"note"`, `payload:{}`, `status:null`, `tags:[]`, `id:<id:1>`, `created_at`/`updated_at` = `T+0`, `links_created:[]`, `chunks_created:0`. Exit 0.
+Output: full node object — `kind:"note"`, `payload:{}`, `status:null`, `tags:[]`, `id:<id:1>`, `created_at`/`updated_at` = `T+0`, `links_created:[]`, `unresolved_links:[]`, `chunks_created:0`. Exit 0.
 
 **T5.2 full add.**
 Input: `add task --title "Renew passport" --payload '{"due_at":"2026-03-01","priority":"med"}' --tag admin --tag personal --status open --occurred-at 2026-01-01T09:00:00.000Z`

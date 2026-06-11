@@ -19,6 +19,8 @@ mem kinds [kind]   # payload contracts, statuses, defaults — self-discover her
 
 Relations: `references` `relates_to` `derived_from` `about` `part_of` `blocks` `follows` `evidences`.
 
+Wikilinks: `[[<id>]]` or `[[Exact Title]]` in a body becomes a `references` edge on add and body update (exact title match against live nodes — never guesses). Misses are returned as `unresolved_links` and are **not** retried when the target appears later: repair them now, while you know what they meant.
+
 Ideas: create one `idea` anchor node; later fragments are `note`s linked `part_of` → the anchor (search for it first — never edit the anchor's body). Group constellations with hierarchical tags (`story/<slug>/...`).
 
 Examples:

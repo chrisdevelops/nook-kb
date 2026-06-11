@@ -25,6 +25,7 @@ describe("Item 5 — add (capture & find slice)", () => {
       updated_at: "2026-01-01T00:00:00.000Z",
       deleted_at: null,
       links_created: [],
+      unresolved_links: [],
       chunks_created: 0,
     });
   });

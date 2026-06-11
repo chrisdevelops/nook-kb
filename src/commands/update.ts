@@ -5,6 +5,7 @@ import { KINDS } from "../kinds";
 import { loadLiveNode, nodeResponse, nodeTags } from "../nodes";
 import type { Db } from "../sqlite";
 import { parsePayload, validatePayload, validateStatus } from "../validate";
+import { applyWikilinks } from "../wikilinks";
 
 export type UpdateArgs = {
   title?: string;
@@ -95,6 +96,10 @@ export function updateCommand(
     );
     ftsUpsert(db, { id, title, body }, nodeTags(db, id)); // T4.2 re-index
 
+    // body change re-resolves wikilinks, diffed origin-scoped (SPEC §5.1)
+    const wiki =
+      args.body === undefined ? undefined : applyWikilinks(db, ctx, id, body);
+
     let cascaded: { id: string; from: string; to: string }[] | undefined;
     if (archiving) {
       cascaded = db
@@ -122,7 +127,10 @@ export function updateCommand(
     db.exec("COMMIT");
 
     const updated = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
-    const res = nodeResponse(updated, nodeTags(db, id));
+    let res = nodeResponse(updated, nodeTags(db, id));
+    if (wiki !== undefined) {
+      res = { ...res, unresolved_links: wiki.unresolved };
+    }
     return cascaded === undefined ? res : { ...res, cascaded };
   } catch (e) {
     db.exec("ROLLBACK");

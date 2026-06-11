@@ -8,6 +8,7 @@ import { KINDS } from "../kinds";
 import { nodeResponse } from "../nodes";
 import type { Db } from "../sqlite";
 import { parsePayload, validatePayload, validateStatus } from "../validate";
+import { applyWikilinks } from "../wikilinks";
 
 export type AddArgs = {
   kind: string;
@@ -117,6 +118,7 @@ export function addCommand(
       });
       return { dst: l.dst, rel: l.rel };
     });
+    const wiki = applyWikilinks(db, ctx, id, body);
     ftsUpsert(db, { id, title: args.title, body }, args.tags);
     const chunksCreated =
       args.kind === "source"
@@ -132,7 +134,8 @@ export function addCommand(
     const row = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
     return {
       ...nodeResponse(row, args.tags),
-      links_created: linksCreated,
+      links_created: [...linksCreated, ...wiki.created],
+      unresolved_links: wiki.unresolved,
       chunks_created: chunksCreated,
     };
   } catch (e) {
