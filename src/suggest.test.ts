@@ -261,6 +261,31 @@ describe("Item 13 — suggester (suggest / review / accept / reject)", () => {
     expect(JSON.parse(missing.stderr).error.code).toBe("NOT_FOUND");
   });
 
+  it("T13.8 accept when the edge already exists keeps the existing origin", async () => {
+    const ctx = makeTestContext();
+    await seedStandardGraph(ctx);
+    await runCommand(["suggest"], ctx);
+    // the pair gets linked manually after the suggestion was computed
+    await runCommand(["link", testId(6), testId(7), "relates_to"], ctx);
+
+    const res = await runCommand(
+      ["suggest", "accept", testId(6), testId(7)],
+      ctx
+    );
+
+    expect(res.exitCode).toBe(0);
+    const accepted = JSON.parse(res.stdout);
+    expect(accepted.status).toBe("accepted");
+    expect(accepted.edge.origin).toBe("direct"); // silent no-op, origin kept
+
+    const pending = JSON.parse(
+      (await runCommand(["suggest", "review"], ctx)).stdout
+    ) as Array<{ src: string; dst: string }>;
+    expect(
+      pending.find((s) => s.src === testId(6) && s.dst === testId(7))
+    ).toBeUndefined();
+  });
+
   it("T13.7 rejected pairs never reappear, in either direction", async () => {
     const ctx = makeTestContext();
     await seedStandardGraph(ctx);

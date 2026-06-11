@@ -55,7 +55,8 @@ export function applyWikilinks(
   body: string
 ): { created: { dst: string; rel: string }[]; unresolved: string[] } {
   const { edges, unresolved } = resolveWikilinks(body, db);
-  const wanted = new Set(edges.map((e) => e.dst));
+  // a body naming its own node is not a relationship — drop silently
+  const wanted = new Set(edges.map((e) => e.dst).filter((dst) => dst !== src));
   db.run(
     `DELETE FROM edges WHERE src = ? AND rel = 'references' AND origin = 'wikilink'
      AND dst NOT IN (SELECT value FROM json_each(?))`,
@@ -63,15 +64,14 @@ export function applyWikilinks(
     JSON.stringify([...wanted])
   );
   const created: { dst: string; rel: string }[] = [];
-  for (const { dst } of edges) {
-    const exists = db.get(
-      "SELECT 1 AS x FROM edges WHERE src = ? AND dst = ? AND rel = 'references'",
-      src,
-      dst
+  for (const dst of wanted) {
+    const edge = createEdge(
+      db,
+      ctx,
+      { src, dst, rel: "references", origin: "wikilink" },
+      { ifDuplicate: "keep" }
     );
-    if (exists) continue;
-    createEdge(db, ctx, { src, dst, rel: "references", origin: "wikilink" });
-    created.push({ dst, rel: "references" });
+    if (!edge.existed) created.push({ dst, rel: "references" });
   }
   return { created, unresolved };
 }

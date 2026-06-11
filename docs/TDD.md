@@ -325,6 +325,7 @@ Per §6: candidate presence/absence and lifecycle only — never score values.
 **T-W.5** links to soft-deleted nodes → unresolved.
 **T-W.6 body-update diff (origin-scoped).** Node body has `[[A]]`; also a `direct` `references` edge to B. Update body to `[[B]]` (drop `[[A]]`) → wikilink edge to A removed, wikilink edge to B **not duplicated** (the existing direct edge to B survives untouched with origin `direct`); a wikilink to a genuinely new target adds an edge. Only `origin='wikilink'` edges are ever added/removed by resolution (SPEC §5.1).
 **T-W.7 unresolved links are not persisted.** Body has `[[Future Thing]]` (unknown) → reported in `unresolved`; creating a node titled "Future Thing" afterwards does **not** materialize an edge (stated v1 limitation, SPEC §5.1).
+**T-W.8 no self-edges.** A body wikilinking its own node (by title or id, on add or body update) creates no edge and is not `unresolved` — a node naming itself is not a relationship.
 
 ---
 

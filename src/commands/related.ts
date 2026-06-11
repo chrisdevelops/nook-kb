@@ -2,7 +2,7 @@ import type { Config } from "../config";
 import type { Context } from "../context";
 import { loadLiveNode } from "../nodes";
 import type { Db } from "../sqlite";
-import { expandFromSeeds, recencyDecay } from "./query";
+import { expandFromSeeds, graphWeights, pathScore } from "./query";
 
 export type RelatedArgs = {
   hops?: number;
@@ -33,9 +33,7 @@ export function relatedCommand(
   loadLiveNode(db, id);
   const maxHops = args.hops ?? 1;
   const limit = args.limit ?? (config.get("query.default_limit") as number);
-  const w2 = config.get("query.weights.edge") as number;
-  const w3 = config.get("query.weights.recency") as number;
-  const hopDecay = config.get("query.hop_decay") as number;
+  const weights = graphWeights(config);
   const now = ctx.clock().getTime();
 
   const visited = expandFromSeeds(db, [id], maxHops);
@@ -60,9 +58,7 @@ export function relatedCommand(
             hops: v.hops as number | null,
             via: v.via,
           },
-          score:
-            v.pathWeight * w2 * Math.pow(hopDecay, v.hops) +
-            recencyDecay(now, r.occurred_at, r.created_at) * w3,
+          score: pathScore(v, now, r.occurred_at, r.created_at, weights),
         };
       })
       .sort((a, b) => b.score - a.score)

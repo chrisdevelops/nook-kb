@@ -13,11 +13,20 @@ export type EdgeSpec = {
 };
 
 /**
- * Shared edge creation for add --link, mem link, and (later) wikilink/
- * suggest channels. Validates rel and endpoints, canonicalizes symmetric
- * pairs, rejects duplicates. Caller owns the transaction.
+ * Shared edge creation for add --link, mem link, wikilink, and suggest
+ * channels. Validates rel and endpoints, canonicalizes symmetric pairs.
+ * A duplicate (same src/dst/rel) throws DUPLICATE_EDGE by default;
+ * `ifDuplicate: "keep"` makes it the SPEC §5.1 silent no-op instead —
+ * the existing row (and its origin) is returned with `existed: true`,
+ * atomically via INSERT OR IGNORE so concurrent writers cannot race the
+ * check. Caller owns the transaction.
  */
-export function createEdge(db: Db, ctx: Context, spec: EdgeSpec): EdgeSpec {
+export function createEdge(
+  db: Db,
+  ctx: Context,
+  spec: EdgeSpec,
+  opts?: { ifDuplicate?: "error" | "keep" }
+): EdgeSpec & { existed?: true } {
   const relDef = RELATIONS[spec.rel];
   if (!relDef) {
     throw new UserError("UNKNOWN_REL", `unknown relation "${spec.rel}"`);
@@ -28,22 +37,9 @@ export function createEdge(db: Db, ctx: Context, spec: EdgeSpec): EdgeSpec {
   let { src, dst } = spec;
   if (relDef.symmetric && dst < src) [src, dst] = [dst, src];
 
-  const exists = db.get(
-    "SELECT 1 AS x FROM edges WHERE src = ? AND dst = ? AND rel = ?",
-    src,
-    dst,
-    spec.rel
-  );
-  if (exists) {
-    throw new UserError(
-      "DUPLICATE_EDGE",
-      `edge ${src} -[${spec.rel}]-> ${dst} already exists`
-    );
-  }
-
   const weight = spec.weight ?? 1.0;
   db.run(
-    "INSERT INTO edges (src, dst, rel, weight, origin, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO edges (src, dst, rel, weight, origin, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     src,
     dst,
     spec.rel,
@@ -51,7 +47,29 @@ export function createEdge(db: Db, ctx: Context, spec: EdgeSpec): EdgeSpec {
     spec.origin,
     ctx.clock().toISOString()
   );
-  return { src, dst, rel: spec.rel, weight, origin: spec.origin };
+  if ((db.get("SELECT changes() AS n")!.n as number) === 1) {
+    return { src, dst, rel: spec.rel, weight, origin: spec.origin };
+  }
+  if (opts?.ifDuplicate !== "keep") {
+    throw new UserError(
+      "DUPLICATE_EDGE",
+      `edge ${src} -[${spec.rel}]-> ${dst} already exists`
+    );
+  }
+  const row = db.get(
+    "SELECT src, dst, rel, weight, origin FROM edges WHERE src = ? AND dst = ? AND rel = ?",
+    src,
+    dst,
+    spec.rel
+  )!;
+  return {
+    src: row.src as string,
+    dst: row.dst as string,
+    rel: row.rel as string,
+    weight: row.weight as number,
+    origin: row.origin as EdgeSpec["origin"],
+    existed: true,
+  };
 }
 
 /** `--link <id>:<rel>` flag syntax. */

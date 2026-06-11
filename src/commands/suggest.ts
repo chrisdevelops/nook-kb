@@ -204,21 +204,12 @@ export function suggestAcceptCommand(
   try {
     // an edge that appeared since the suggestion keeps its origin (silent
     // no-op, same rule as wikilinks — SPEC §5.1)
-    let edge = db.get(
-      `SELECT src, dst, rel, weight, origin FROM edges
-       WHERE src = ? AND dst = ? AND rel = 'relates_to'`,
-      src,
-      dst
+    const { existed: _, ...edge } = createEdge(
+      db,
+      ctx,
+      { src, dst, rel: "relates_to", weight: 1.0, origin: "suggested" },
+      { ifDuplicate: "keep" }
     );
-    if (!edge) {
-      edge = createEdge(db, ctx, {
-        src,
-        dst,
-        rel: "relates_to",
-        weight: 1.0,
-        origin: "suggested",
-      }) as Record<string, unknown>;
-    }
     db.run(
       "UPDATE link_suggestions SET status = 'accepted' WHERE src = ? AND dst = ?",
       src,

@@ -134,6 +134,28 @@ describe("wikilinks wired through add and update (TDD §5.2)", () => {
     ]);
   });
 
+  it("T-W.8 a body wikilinking its own node never creates a self-edge", async () => {
+    const ctx = makeTestContext();
+    const added = await runCommand(
+      ["add", "note", "--title", "Analysis", "--body", "See [[Analysis]]."],
+      ctx
+    );
+    const node = JSON.parse(added.stdout);
+    expect(node.links_created).toEqual([]);
+    expect(node.unresolved_links).toEqual([]); // resolved, just self — not a miss
+
+    // by id, via update, same rule
+    const updated = await runCommand(
+      ["update", node.id, "--body", `See [[${node.id}]].`],
+      ctx
+    );
+    expect(updated.exitCode).toBe(0);
+
+    const db = openDatabase(ctx.dbPath);
+    expect(db.get("SELECT COUNT(*) AS n FROM edges")?.n).toBe(0);
+    db.close();
+  });
+
   it("T-W.7 unresolved links are not persisted: no forward references", async () => {
     const ctx = makeTestContext();
     const added = await runCommand(

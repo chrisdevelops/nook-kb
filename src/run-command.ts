@@ -36,6 +36,15 @@ function many(v: string | string[] | undefined): string[] {
   return v === undefined ? [] : Array.isArray(v) ? v : [v];
 }
 
+function parseLimit(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new UserError("INVALID_ARGS", "--limit must be a positive integer");
+  }
+  return limit;
+}
+
 /** `--hops` is 1..3 (SPEC §5.2: default 1, max 3). */
 function parseHops(raw: string | undefined): number | undefined {
   if (raw === undefined) return undefined;
@@ -236,13 +245,6 @@ export async function runCommand(
           human?: boolean;
         }
       ) => {
-        const limit = opts.limit === undefined ? undefined : Number(opts.limit);
-        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
-          throw new UserError(
-            "INVALID_ARGS",
-            "--limit must be a positive integer"
-          );
-        }
         const db = openStore(ctx.dbPath, ctx.clock);
         try {
           const hits = queryCommand(db, ctx, config, {
@@ -252,7 +254,7 @@ export async function runCommand(
             status: opts.status,
             since: opts.since,
             until: opts.until,
-            limit,
+            limit: parseLimit(opts.limit),
             hops: parseHops(opts.hops),
             includeClosed: opts.includeClosed,
           });
@@ -275,13 +277,7 @@ export async function runCommand(
         dst: string | undefined,
         opts: { limit?: string }
       ) => {
-        const limit = opts.limit === undefined ? undefined : Number(opts.limit);
-        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
-          throw new UserError(
-            "INVALID_ARGS",
-            "--limit must be a positive integer"
-          );
-        }
+        const limit = parseLimit(opts.limit);
         if (action === undefined) {
           withDb((db) => suggestCommand(db, ctx, config, limit))();
         } else if (action === "review") {
@@ -311,17 +307,10 @@ export async function runCommand(
     .option("--hops <n>", "neighborhood depth (1-3)")
     .option("--limit <n>", "max results")
     .action((id: string, opts: { hops?: string; limit?: string }) => {
-      const limit = opts.limit === undefined ? undefined : Number(opts.limit);
-      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
-        throw new UserError(
-          "INVALID_ARGS",
-          "--limit must be a positive integer"
-        );
-      }
       withDb((db) =>
         relatedCommand(db, ctx, config, id, {
           hops: parseHops(opts.hops),
-          limit,
+          limit: parseLimit(opts.limit),
         })
       )();
     });

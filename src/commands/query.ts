@@ -75,6 +75,34 @@ export function recencyDecay(
   return Math.pow(2, -ageDays / 30);
 }
 
+export type GraphWeights = {
+  edge: number;
+  recency: number;
+  hopDecay: number;
+};
+
+export function graphWeights(config: Config): GraphWeights {
+  return {
+    edge: config.get("query.weights.edge") as number,
+    recency: config.get("query.weights.recency") as number,
+    hopDecay: config.get("query.hop_decay") as number,
+  };
+}
+
+/** Edge-path term of SPEC §5.2 step 3 — shared by query and related. */
+export function pathScore(
+  v: Visit,
+  now: number,
+  occurredAt: unknown,
+  createdAt: unknown,
+  w: GraphWeights
+): number {
+  return (
+    v.pathWeight * w.edge * Math.pow(w.hopDecay, v.hops) +
+    recencyDecay(now, occurredAt, createdAt) * w.recency
+  );
+}
+
 export type Visit = { hops: number; via: string[]; pathWeight: number };
 
 /**
@@ -140,9 +168,7 @@ export function queryCommand(
 
   if (args.text !== undefined && args.text !== "") {
     const w1 = config.get("query.weights.fts") as number;
-    const w2 = config.get("query.weights.edge") as number;
-    const w3 = config.get("query.weights.recency") as number;
-    const hopDecay = config.get("query.hop_decay") as number;
+    const weights = graphWeights(config);
     const maxHops = args.hops ?? 1;
     const now = ctx.clock().getTime();
 
@@ -153,6 +179,11 @@ export function queryCommand(
     const seedWhere = args.includeClosed
       ? "n.deleted_at IS NULL"
       : `n.deleted_at IS NULL AND ${terminalExclusionSql()}`;
+    // top N seeds (SPEC §5.2 step 1): a broad term must not expand the
+    // whole corpus just to be sliced to `limit` at the end. 5× leaves
+    // headroom for post-expansion filters and chunk dedup; a tunable,
+    // not a contract (TDD §6).
+    const seedCap = limit * 5;
     const seeds = db.all(
       `SELECT n.id, n.kind, n.title, n.occurred_at, n.created_at,
               snippet(nodes_fts, -1, '<b>', '</b>', '…', 12) AS snip,
@@ -160,8 +191,10 @@ export function queryCommand(
        FROM nodes_fts
        JOIN nodes n ON n.id = nodes_fts.node_id
        WHERE nodes_fts MATCH ? AND ${seedWhere}
-       ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)`,
-      args.text
+       ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)
+       LIMIT ?`,
+      args.text,
+      seedCap
     );
     const maxBm25 = (seeds[0]?.score as number) || 1;
     const hits: QueryHit[] = seeds.map((r) => ({
@@ -171,7 +204,7 @@ export function queryCommand(
       snippet: r.snip as string,
       score:
         ((r.score as number) / maxBm25) * w1 +
-        recencyDecay(now, r.occurred_at, r.created_at) * w3,
+        recencyDecay(now, r.occurred_at, r.created_at) * weights.recency,
       hops: 0,
       via: null,
     }));
@@ -199,9 +232,7 @@ export function queryCommand(
           kind: r.kind as string,
           title: r.title as string,
           snippet: null,
-          score:
-            v.pathWeight * w2 * Math.pow(hopDecay, v.hops) +
-            recencyDecay(now, r.occurred_at, r.created_at) * w3,
+          score: pathScore(v, now, r.occurred_at, r.created_at, weights),
           hops: v.hops,
           via: v.via,
         });

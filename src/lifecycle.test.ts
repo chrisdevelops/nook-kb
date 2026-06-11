@@ -163,11 +163,15 @@ describe("Item 6 — get / update / delete / restore / purge", () => {
     expect(res.exitCode).toBe(0);
     expect(JSON.parse(res.stdout)).toEqual({ id: testId(5), deleted_at: null });
 
-    // re-indexed and mutable again (top hit; expansion may trail neighbors)
+    // re-indexed and mutable again: the match leads, its restored edge
+    // brings exactly its 1-hop neighbor back too
     const hits = JSON.parse(
       (await runCommand(["query", "payment capture"], ctx)).stdout
     );
-    expect(hits[0].id).toBe(testId(5));
+    expect(hits.map((h: { id: string }) => h.id)).toEqual([
+      testId(5),
+      testId(4),
+    ]);
     expect(
       (await runCommand(["update", testId(5), "--title", "Square notes"], ctx))
         .exitCode
