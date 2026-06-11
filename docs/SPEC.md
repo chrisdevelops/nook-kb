@@ -295,7 +295,8 @@ mem suggest review [--limit <n>]
 mem suggest accept <src> <dst> | mem suggest reject <src> <dst>
 mem report <name> [report-specific flags] [--human]
 mem kinds [<kind>]             # contract self-discovery
-mem stats                      # node/edge/tag counts by kind, suggestion backlog
+mem stats                      # live node counts by kind, edges/tags, suggestion
+                               # backlog, plus a separate soft-deleted total
 mem export [--kind]... [--since]   # JSONL dump for portability (not the backup mechanism)
 mem import <jsonl>             # restore from an export
 mem backup [--dest <dir>] [--keep <n>]   # VACUUM INTO timestamped snapshot, rotate to n (default 14)

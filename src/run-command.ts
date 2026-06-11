@@ -11,6 +11,11 @@ import { kindsCommand } from "./commands/kinds";
 import { linkCommand, unlinkCommand } from "./commands/link";
 import { tagCommand, untagCommand } from "./commands/tag";
 import { queryCommand, renderHuman } from "./commands/query";
+import {
+  backupCommand,
+  exportCommand,
+  importCommand,
+} from "./commands/portability";
 import { statsCommand } from "./commands/stats";
 import type { CommandResult, Context } from "./context";
 import { ConfigError, loadConfig } from "./config";
@@ -242,6 +247,42 @@ export async function runCommand(
   cli
     .command("stats", "node/edge/tag counts by kind")
     .action(withDb((db) => statsCommand(db)));
+  cli
+    .command("export", "JSONL dump for portability")
+    .option("--kind <kind>", "filter by kind (repeatable)")
+    .option("--since <iso>", "occurred_at/created_at lower bound")
+    .action((opts: { kind?: string | string[]; since?: string }) => {
+      const db = openStore(ctx.dbPath, ctx.clock);
+      try {
+        stdout = exportCommand(db, {
+          kinds: many(opts.kind),
+          since: opts.since,
+        });
+      } finally {
+        db.close();
+      }
+    });
+  cli
+    .command("import <jsonl>", "restore from an export")
+    .action((file: string) => {
+      withDb((db) => importCommand(db, file))();
+    });
+  cli
+    .command("backup", "VACUUM INTO timestamped snapshot")
+    .option("--dest <dir>", "snapshot directory")
+    .option("--keep <n>", "snapshots to retain")
+    .action((opts: { dest?: string; keep?: string }) => {
+      const keep = opts.keep === undefined ? undefined : Number(opts.keep);
+      if (keep !== undefined && (!Number.isInteger(keep) || keep < 1)) {
+        throw new UserError(
+          "INVALID_ARGS",
+          "--keep must be a positive integer"
+        );
+      }
+      withDb((db) =>
+        backupCommand(db, ctx, config, { dest: opts.dest, keep })
+      )();
+    });
 
   try {
     cli.parse(["mem-node", "mem", ...argv], { run: false });

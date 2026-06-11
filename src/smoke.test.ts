@@ -31,6 +31,7 @@ describe("smoke — real binary", () => {
         edges: 0,
         tags: 0,
         suggestions_pending: 0,
+        deleted: 0,
       });
     }
 

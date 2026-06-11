@@ -77,7 +77,7 @@ Returned by `add`, `get`, `update`:
 | `query` | JSON array of `{ "id", "kind", "title", "snippet", "score", "hops", "via" }`. Phase 1: `hops` always `0`, `via` always `null`. `score` is a positive number; tests never assert its value, only presence and ordering. No-text listing mode: `score` and `snippet` are `null`, ordering is `occurred_at`→`created_at` descending. |
 | `related` | Phase 2; shape reserved: array of `{ "id", "kind", "title", "hops", "via" }` |
 | `kinds` | array of `{ "kind", "statuses": [...] \| null, "default_status": <s> \| null, "payload_schema": <JSON Schema> }`; `kinds <kind>` returns the single object |
-| `stats` | `{ "nodes": { "<kind>": n, ... }, "edges": n, "tags": n, "suggestions_pending": n }` |
+| `stats` | `{ "nodes": { "<kind>": n, ... }, "edges": n, "tags": n, "suggestions_pending": n, "deleted": n }` — kind counts cover live nodes only; soft-deleted nodes appear solely in `deleted` |
 | `export` | JSONL to stdout: one `{ "node": {...full incl. body, deleted_at...}, "edges_out": [...], "tags": [...] }` per line; soft-deleted nodes included |
 | `import` | `{ "imported": n, "skipped": n, "edges_skipped": n }` (skip = id already exists; edges_skipped = edge endpoint absent from file and target DB) |
 | `backup` | `{ "path": "<dest>/memory-<iso-compact>.db", "kept": n }` |

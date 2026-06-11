@@ -19,6 +19,7 @@ describe("Item 2 — migrations", () => {
       edges: 0,
       tags: 0,
       suggestions_pending: 0,
+      deleted: 0,
     });
     expect(existsSync(ctx.dbPath)).toBe(true);
 
