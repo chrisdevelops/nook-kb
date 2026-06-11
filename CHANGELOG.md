@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-11
+
+Phase 2: graph retrieval. Wikilinks (#11), query expansion + related (#12), suggester (#13), plus post-review hardening. MINOR: all changes additive over v0.1.0.
+
 ### Fixed
 
 - Post-review hardening (review of the Phase 2 diff): the SPEC §5.1 duplicate-edge silent no-op now lives on `createEdge` itself (`ifDuplicate: "keep"`, atomic via `INSERT OR IGNORE`) instead of pre-check SELECTs at call sites — closing a TOCTOU window where a concurrent writer could make `suggest accept` or wikilink resolution fail `DUPLICATE_EDGE` and strand the suggestion row pending. A body wikilinking its own node (by title or id) no longer persists a self-edge (T-W.8). Query expansion now seeds from the top FTS matches only (5× the result limit) per SPEC §5.2 "top N seed nodes", instead of expanding every match of a broad term. Shared path-scoring extracted (`pathScore`/`graphWeights`, used by query and related), `--limit` parsing deduplicated in the router, and the two expansion-relaxed test assertions tightened back to exact result sets.
