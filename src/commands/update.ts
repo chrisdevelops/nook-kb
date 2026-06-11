@@ -42,6 +42,13 @@ export function updateCommand(
     validateStatus(row.kind as string, args.status);
   }
 
+  if (row.kind === "event" && args.occurredAt !== undefined) {
+    throw new UserError(
+      "INVALID_ARGS",
+      "events derive occurred_at from starts_at; --occurred-at is not allowed"
+    );
+  }
+
   let payload = row.payload as string;
   if (args.payloadMerge !== undefined) {
     const patch = parsePayload(args.payloadMerge);
@@ -60,6 +67,12 @@ export function updateCommand(
   const body = args.body ?? (row.body as string);
   const now = ctx.clock().toISOString();
 
+  // Event invariant re-fires on any write that changes starts_at
+  let occurredAt = args.occurredAt ?? (row.occurred_at as string | null);
+  if (row.kind === "event") {
+    occurredAt = (JSON.parse(payload) as { starts_at: string }).starts_at;
+  }
+
   // Archival cascade (SPEC §4.1): project → archived drops its non-terminal
   // part_of tasks in the same operation, one hop only.
   const archiving =
@@ -76,7 +89,7 @@ export function updateCommand(
       body,
       payload,
       args.status ?? (row.status as string | null),
-      args.occurredAt ?? (row.occurred_at as string | null),
+      occurredAt,
       now,
       id
     );

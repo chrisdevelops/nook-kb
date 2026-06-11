@@ -17,10 +17,14 @@ function realContext(): Context {
   };
 }
 
-const { stdout, stderr, exitCode } = await runCommand(
-  process.argv.slice(2),
-  realContext()
-);
+const argv = process.argv.slice(2);
+const ctx = realContext();
+if (argv.includes("--body-stdin")) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  ctx.stdin = Buffer.concat(chunks).toString("utf8");
+}
+const { stdout, stderr, exitCode } = await runCommand(argv, ctx);
 if (stdout) process.stdout.write(stdout + "\n");
 if (stderr) process.stderr.write(stderr + "\n");
 process.exit(exitCode);

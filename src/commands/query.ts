@@ -71,10 +71,10 @@ export function queryCommand(
 
   if (args.text !== undefined && args.text !== "") {
     // FTS mode: BM25 weighted title > tags > body (column order:
-    // node_id, title, body, tags)
+    // node_id, title, body, tags). No SQL LIMIT — chunk dedup happens
+    // below, then the limit applies to the deduped list.
     const params: unknown[] = [args.text];
     const where = filterSql(args, params);
-    params.push(limit);
     const rows = db.all(
       `SELECT n.id, n.kind, n.title,
               snippet(nodes_fts, -1, '<b>', '</b>', '…', 12) AS snip,
@@ -82,11 +82,10 @@ export function queryCommand(
        FROM nodes_fts
        JOIN nodes n ON n.id = nodes_fts.node_id
        WHERE nodes_fts MATCH ? AND ${where}
-       ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)
-       LIMIT ?`,
+       ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)`,
       ...params
     );
-    return rows.map((r) => ({
+    const hits = rows.map((r) => ({
       id: r.id as string,
       kind: r.kind as string,
       title: r.title as string,
@@ -95,6 +94,7 @@ export function queryCommand(
       hops: 0,
       via: null,
     }));
+    return dedupChunks(db, hits).slice(0, limit);
   }
 
   // Listing mode (SPEC §5.2): no text = pure filtered listing, recency order
@@ -118,6 +118,37 @@ export function queryCommand(
     hops: 0,
     via: null,
   }));
+}
+
+/**
+ * Chunk dedup (SPEC §5.2): when a chunked source and its chunks both
+ * match, drop the source row and all but the highest-scoring chunk —
+ * one result per document. Hits arrive score-descending.
+ */
+function dedupChunks(db: Db, hits: QueryHit[]): QueryHit[] {
+  const chunkIds = hits.filter((h) => h.kind === "chunk").map((h) => h.id);
+  if (chunkIds.length === 0) return hits;
+
+  const parentOf = new Map<string, string>();
+  for (const row of db.all(
+    `SELECT src, dst FROM edges WHERE rel = 'part_of' AND src IN (${chunkIds.map(() => "?").join(", ")})`,
+    ...chunkIds
+  )) {
+    parentOf.set(row.src as string, row.dst as string);
+  }
+
+  const matchedParents = new Set(parentOf.values());
+  const seenParent = new Set<string>();
+  return hits.filter((h) => {
+    if (h.kind === "chunk") {
+      const parent = parentOf.get(h.id);
+      if (parent === undefined) return true;
+      if (seenParent.has(parent)) return false; // keep best chunk only
+      seenParent.add(parent);
+      return true;
+    }
+    return !matchedParents.has(h.id); // drop the source when chunks matched
+  });
 }
 
 /** `--human`: markdown list (SPEC §10.3). */

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Events & transcripts (#8): the event `occurred_at = starts_at` invariant (applies on add, re-fires when starts_at changes via update; explicit `--occurred-at` on events is INVALID_ARGS); the transcript chunker as a direct pure-function contract (paragraph/speaker-turn boundaries, greedy ~3k-token packing, sentence-split fallback, deterministic, exact-slice round-trip); source auto-chunking on `add --body-stdin` (chunk nodes titled "(n/total)", part_of edges, source keeps full body); and query-time chunk dedup — one best chunk per document, source row dropped when its chunks match.
+
 - Full query surface (#7): composable filters (`--kind`/`--tag`/`--status`/`--since`/`--until` on occurred_at→created_at, `--limit` honoring flag > config > default 20), terminal-state exclusion driven by per-kind `terminalStatuses` in the registry (lifted by `--include-closed`; soft-delete exclusion is unconditional), no-text listing mode (recency-ordered, null score/snippet), and `--human` markdown rendering. TDD T8.3 amended: payloads are not FTS-indexed, so the fixture query term moved from payload-only "oatmeal" to title "breakfast".
 
 - Edges & tags (#6): `add --link <id>:<rel>` (transactional — a bad link aborts the whole add), `mem link` (--weight) / `mem unlink`, relation registry with symmetric canonicalization (reverse relates_to → DUPLICATE_EDGE; directional reverses allowed), `mem tag`/`mem untag` (idempotent, full-set response, FTS re-sync), and the project-archival cascade: archiving drops non-terminal part_of tasks one hop, reported as `cascaded` in the update response. Soft-deleted endpoints reject linking.

@@ -135,4 +135,84 @@ describe("Item 5 — add (capture & find slice)", () => {
     );
     expect(event.status).toBe("planned");
   });
+
+  it("T5.8 event timestamp convention: occurred_at mirrors starts_at", async () => {
+    const ctx = makeTestContext();
+    const event = JSON.parse(
+      (
+        await runCommand(
+          [
+            "add",
+            "event",
+            "--title",
+            "Dentist",
+            "--payload",
+            '{"starts_at":"2026-01-20T15:00:00.000Z"}',
+          ],
+          ctx
+        )
+      ).stdout
+    );
+    expect(event.occurred_at).toBe("2026-01-20T15:00:00.000Z");
+  });
+
+  it("T5.8b mirror is an invariant: explicit --occurred-at rejected, reschedule follows", async () => {
+    const ctx = makeTestContext();
+
+    const explicit = await runCommand(
+      [
+        "add",
+        "event",
+        "--title",
+        "Dentist",
+        "--occurred-at",
+        "2026-01-19T00:00:00.000Z",
+        "--payload",
+        '{"starts_at":"2026-01-20T15:00:00.000Z"}',
+      ],
+      ctx
+    );
+    expect(explicit.exitCode).toBe(1);
+    expect(JSON.parse(explicit.stderr).error.code).toBe("INVALID_ARGS");
+
+    const { id } = JSON.parse(
+      (
+        await runCommand(
+          [
+            "add",
+            "event",
+            "--title",
+            "Dentist",
+            "--payload",
+            '{"starts_at":"2026-01-20T15:00:00.000Z"}',
+          ],
+          ctx
+        )
+      ).stdout
+    );
+
+    // rescheduling via payload-merge moves occurred_at with it
+    const moved = JSON.parse(
+      (
+        await runCommand(
+          [
+            "update",
+            id,
+            "--payload-merge",
+            '{"starts_at":"2026-01-21T15:00:00.000Z"}',
+          ],
+          ctx
+        )
+      ).stdout
+    );
+    expect(moved.occurred_at).toBe("2026-01-21T15:00:00.000Z");
+
+    // explicit --occurred-at on update is rejected for events too
+    const explicitUpdate = await runCommand(
+      ["update", id, "--occurred-at", "2026-01-22T00:00:00.000Z"],
+      ctx
+    );
+    expect(explicitUpdate.exitCode).toBe(1);
+    expect(JSON.parse(explicitUpdate.stderr).error.code).toBe("INVALID_ARGS");
+  });
 });

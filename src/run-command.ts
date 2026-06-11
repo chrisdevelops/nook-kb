@@ -62,6 +62,7 @@ export async function runCommand(
     .command("add <kind>", "capture a node")
     .option("--title <title>", "node title")
     .option("--body <md>", "markdown body")
+    .option("--body-stdin", "read body from stdin")
     .option("--payload <json>", "kind payload")
     .option("--tag <tag>", "tag (repeatable)")
     .option("--link <id:rel>", "edge to an existing node (repeatable)")
@@ -73,6 +74,7 @@ export async function runCommand(
         opts: {
           title?: string;
           body?: string;
+          bodyStdin?: boolean;
           payload?: string;
           tag?: string | string[];
           link?: string | string[];
@@ -83,11 +85,21 @@ export async function runCommand(
         if (typeof opts.title !== "string" || opts.title === "") {
           throw new UserError("INVALID_ARGS", "--title is required");
         }
+        let body = opts.body;
+        if (opts.bodyStdin) {
+          if (ctx.stdin === undefined) {
+            throw new UserError(
+              "INVALID_ARGS",
+              "--body-stdin given but stdin is empty"
+            );
+          }
+          body = ctx.stdin;
+        }
         withDb((db) =>
-          addCommand(db, ctx, {
+          addCommand(db, ctx, config, {
             kind,
             title: opts.title as string,
-            body: opts.body,
+            body,
             payload: opts.payload,
             tags: many(opts.tag),
             links: many(opts.link).map(parseLinkFlag),
