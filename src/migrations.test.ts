@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { runCommand } from "./run-command";
-import { makeTestContext } from "./testing";
+import { makeUnmigratedContext } from "./testing";
 import { openDatabase } from "./sqlite";
 import { openStore } from "./store";
 
 describe("Item 2 — migrations", () => {
   it("T2.1 fresh database applies all migrations", async () => {
-    const ctx = makeTestContext();
+    const ctx = makeUnmigratedContext();
     expect(existsSync(ctx.dbPath)).toBe(false);
 
     const res = await runCommand(["stats"], ctx);
@@ -31,7 +31,7 @@ describe("Item 2 — migrations", () => {
   });
 
   it("T2.2 idempotent — second run performs no migration writes", async () => {
-    const ctx = makeTestContext();
+    const ctx = makeUnmigratedContext();
     await runCommand(["stats"], ctx);
 
     const read = () => {
@@ -50,7 +50,7 @@ describe("Item 2 — migrations", () => {
   });
 
   it("T2.3 pragmas active", async () => {
-    const ctx = makeTestContext();
+    const ctx = makeUnmigratedContext();
     await runCommand(["stats"], ctx);
 
     // journal_mode = WAL persists in the file; visible from any connection

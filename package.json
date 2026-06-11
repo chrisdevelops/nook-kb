@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
+    "ajv": "^8.20.0",
     "cac": "^7.0.0",
     "ulid": "^3.0.2"
   }

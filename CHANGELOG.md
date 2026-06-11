@@ -4,6 +4,8 @@
 
 ### Added
 
+- Capture & find (#4): `mem add <kind>` with AJV payload validation (strict schemas, VALIDATION_FAILED on bad payloads, whole add is one transaction), status validation + per-kind defaults, tags, `--occurred-at`; contentful-FTS write-through; minimal `mem query <text>` — BM25 weighted title > tags > body, seven-key result contract with highlighted snippets, soft-deleted excluded, empty result is success.
+
 - Kind registry (#3): all 18 SPEC §4.1 kinds as TypeBox schemas (one module per kind, explicit registry map) with status vocabularies and per-kind default statuses. `mem kinds [<kind>]` exposes the contract as JSON Schema; unknown kind is `UNKNOWN_KIND` (exit 1). Payload schemas are strict (`additionalProperties: false`): unknown payload fields will fail validation at `add` rather than being silently stored.
 
 - Walking skeleton (#2): in-process `runCommand(argv, ctx)` contract harness with injected Context (deterministic clock/ids per TDD §1) plus a real-binary smoke suite.
