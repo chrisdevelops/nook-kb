@@ -1,29 +1,132 @@
+import type { Config } from "../config";
+import { KINDS } from "../kinds";
 import type { Db } from "../sqlite";
 
-/**
- * Minimal FTS-only query (Phase 1, --hops 0): BM25 weighted
- * title > tags > body over the contentful index; soft-deleted excluded.
- * Column weight order matches nodes_fts (node_id, title, body, tags).
- */
-export function queryCommand(db: Db, text: string): unknown {
+export type QueryArgs = {
+  text?: string;
+  kinds: string[];
+  tags: string[];
+  status?: string;
+  since?: string;
+  until?: string;
+  limit?: number;
+  includeClosed?: boolean;
+};
+
+export type QueryHit = {
+  id: string;
+  kind: string;
+  title: string;
+  snippet: string | null;
+  score: number | null;
+  hops: number;
+  via: null;
+};
+
+/** Terminal states per SPEC §5.2; excluded from results unless --include-closed. */
+function terminalExclusionSql(): string {
+  const clauses: string[] = [];
+  for (const [kind, def] of Object.entries(KINDS)) {
+    if (!def.terminalStatuses) continue;
+    const list = def.terminalStatuses.map((s) => `'${s}'`).join(", ");
+    clauses.push(`NOT (n.kind = '${kind}' AND n.status IN (${list}))`);
+  }
+  return clauses.join(" AND ");
+}
+
+function filterSql(args: QueryArgs, params: unknown[]): string {
+  const where: string[] = ["n.deleted_at IS NULL"];
+  if (!args.includeClosed) where.push(terminalExclusionSql());
+  if (args.kinds.length > 0) {
+    where.push(`n.kind IN (${args.kinds.map(() => "?").join(", ")})`);
+    params.push(...args.kinds);
+  }
+  for (const tag of args.tags) {
+    where.push(
+      "EXISTS (SELECT 1 FROM tags t WHERE t.node_id = n.id AND t.tag = ?)"
+    );
+    params.push(tag);
+  }
+  if (args.status !== undefined) {
+    where.push("n.status = ?");
+    params.push(args.status);
+  }
+  if (args.since !== undefined) {
+    where.push("COALESCE(n.occurred_at, n.created_at) >= ?");
+    params.push(args.since);
+  }
+  if (args.until !== undefined) {
+    where.push("COALESCE(n.occurred_at, n.created_at) <= ?");
+    params.push(args.until);
+  }
+  return where.join(" AND ");
+}
+
+export function queryCommand(
+  db: Db,
+  config: Config,
+  args: QueryArgs
+): QueryHit[] {
+  const limit = args.limit ?? (config.get("query.default_limit") as number);
+
+  if (args.text !== undefined && args.text !== "") {
+    // FTS mode: BM25 weighted title > tags > body (column order:
+    // node_id, title, body, tags)
+    const params: unknown[] = [args.text];
+    const where = filterSql(args, params);
+    params.push(limit);
+    const rows = db.all(
+      `SELECT n.id, n.kind, n.title,
+              snippet(nodes_fts, -1, '<b>', '</b>', '…', 12) AS snip,
+              -bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0) AS score
+       FROM nodes_fts
+       JOIN nodes n ON n.id = nodes_fts.node_id
+       WHERE nodes_fts MATCH ? AND ${where}
+       ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)
+       LIMIT ?`,
+      ...params
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      kind: r.kind as string,
+      title: r.title as string,
+      snippet: r.snip as string,
+      score: r.score as number,
+      hops: 0,
+      via: null,
+    }));
+  }
+
+  // Listing mode (SPEC §5.2): no text = pure filtered listing, recency order
+  const params: unknown[] = [];
+  const where = filterSql(args, params);
+  params.push(limit);
   const rows = db.all(
-    `SELECT n.id, n.kind, n.title,
-            snippet(nodes_fts, -1, '<b>', '</b>', '…', 12) AS snip,
-            -bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0) AS score
-     FROM nodes_fts
-     JOIN nodes n ON n.id = nodes_fts.node_id
-     WHERE nodes_fts MATCH ?
-       AND n.deleted_at IS NULL
-     ORDER BY bm25(nodes_fts, 0.0, 10.0, 1.0, 5.0)`,
-    text
+    `SELECT n.id, n.kind, n.title
+     FROM nodes n
+     WHERE ${where}
+     ORDER BY COALESCE(n.occurred_at, n.created_at) DESC
+     LIMIT ?`,
+    ...params
   );
   return rows.map((r) => ({
-    id: r.id,
-    kind: r.kind,
-    title: r.title,
-    snippet: r.snip,
-    score: r.score,
+    id: r.id as string,
+    kind: r.kind as string,
+    title: r.title as string,
+    snippet: null,
+    score: null,
     hops: 0,
     via: null,
   }));
+}
+
+/** `--human`: markdown list (SPEC §10.3). */
+export function renderHuman(hits: QueryHit[]): string {
+  if (hits.length === 0) return "_no results_";
+  return hits
+    .map((h) => {
+      const snippet = h.snippet ? ` — ${h.snippet}` : "";
+      return `- **${h.title}** (${h.kind}, \`${h.id}\`)${snippet}`;
+    })
+    .join("\n");
 }

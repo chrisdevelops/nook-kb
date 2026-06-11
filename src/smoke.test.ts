@@ -39,4 +39,23 @@ describe("smoke — real binary", () => {
     db.close();
     expect(rows.map((r) => r.version)).toEqual([1]);
   });
+
+  it("T8.9 --human query output is markdown, not JSON", async () => {
+    const dataHome = mkdtempSync(join(tmpdir(), "mem-smoke-"));
+    await spawnMem(
+      ["add", "note", "--title", "Safekeep launch checklist"],
+      dataHome
+    );
+
+    const added = await spawnMem(["query", "safekeep"], dataHome).then(
+      (r) => JSON.parse(r.stdout)[0]
+    );
+    const res = await spawnMem(["query", "safekeep", "--human"], dataHome);
+
+    expect(res.stdout.trimStart().startsWith("- ")).toBe(true);
+    expect(res.stdout).toContain("Safekeep launch checklist");
+    expect(res.stdout).toContain("note");
+    expect(res.stdout).toContain(added.id);
+    expect(() => JSON.parse(res.stdout)).toThrow();
+  });
 });

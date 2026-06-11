@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const idea: KindDef = {
   statuses: ["raw", "exploring", "committed", "shelved"],
   defaultStatus: "raw",
+  terminalStatuses: ["shelved"],
   description: "Idea anchor node; fragments link part_of as note children",
   payload: Type.Object(
     {

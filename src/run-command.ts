@@ -10,7 +10,7 @@ import { updateCommand, type UpdateArgs } from "./commands/update";
 import { kindsCommand } from "./commands/kinds";
 import { linkCommand, unlinkCommand } from "./commands/link";
 import { tagCommand, untagCommand } from "./commands/tag";
-import { queryCommand } from "./commands/query";
+import { queryCommand, renderHuman } from "./commands/query";
 import { statsCommand } from "./commands/stats";
 import type { CommandResult, Context } from "./context";
 import { ConfigError, loadConfig } from "./config";
@@ -174,10 +174,54 @@ export async function runCommand(
       withDb((db) => untagCommand(db, id, tags))();
     });
   cli
-    .command("query [text]", "retrieval: FTS + filters")
-    .action((text?: string) => {
-      withDb((db) => queryCommand(db, text ?? ""))();
-    });
+    .command("query [text]", "retrieval: FTS + filters; no text = listing")
+    .option("--kind <kind>", "filter by kind (repeatable)")
+    .option("--tag <tag>", "filter by tag (repeatable)")
+    .option("--status <status>", "filter by status")
+    .option("--since <iso>", "occurred_at/created_at lower bound")
+    .option("--until <iso>", "occurred_at/created_at upper bound")
+    .option("--limit <n>", "max results")
+    .option("--include-closed", "include terminal-state nodes")
+    .option("--human", "markdown output")
+    .action(
+      (
+        text: string | undefined,
+        opts: {
+          kind?: string | string[];
+          tag?: string | string[];
+          status?: string;
+          since?: string;
+          until?: string;
+          limit?: string;
+          includeClosed?: boolean;
+          human?: boolean;
+        }
+      ) => {
+        const limit = opts.limit === undefined ? undefined : Number(opts.limit);
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+          throw new UserError(
+            "INVALID_ARGS",
+            "--limit must be a positive integer"
+          );
+        }
+        const db = openStore(ctx.dbPath, ctx.clock);
+        try {
+          const hits = queryCommand(db, config, {
+            text,
+            kinds: many(opts.kind),
+            tags: many(opts.tag),
+            status: opts.status,
+            since: opts.since,
+            until: opts.until,
+            limit,
+            includeClosed: opts.includeClosed,
+          });
+          stdout = opts.human ? renderHuman(hits) : JSON.stringify(hits);
+        } finally {
+          db.close();
+        }
+      }
+    );
   cli
     .command("kinds [kind]", "contract self-discovery")
     .action((kind?: string) => {

@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const project: KindDef = {
   statuses: ["active", "paused", "done", "archived"],
   defaultStatus: "active",
+  terminalStatuses: ["archived"],
   description: "A project; tasks link part_of, docs/notes link about",
   payload: Type.Object(
     {

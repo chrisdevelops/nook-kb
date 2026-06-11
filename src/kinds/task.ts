@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const task: KindDef = {
   statuses: ["open", "in_progress", "done", "dropped"],
   defaultStatus: "open",
+  terminalStatuses: ["done", "dropped"],
   description:
     "Personal/life task, cross-project commitment, or project milestone",
   payload: Type.Object(

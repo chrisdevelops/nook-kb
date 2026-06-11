@@ -221,7 +221,7 @@ All against standard graph unless noted.
 
 **T8.2 kind filter.** `query "safekeep" --kind task` → only task nodes; `<id:1>` (project) absent.
 
-**T8.3 tag + since filters.** `query "oatmeal" --tag health/food --since 2026-01-01 --until 2026-01-02` → `<id:6>`; with `--since 2026-01-02` → `[]` (filter applies to `occurred_at`).
+**T8.3 tag + since filters.** `query "breakfast" --tag health/food --since 2026-01-01 --until 2026-01-02` → `<id:6>`; with `--since 2026-01-02` → `[]` (filter applies to `occurred_at`). *(Amended: originally queried "oatmeal", which lives only in the meal payload — payloads are not FTS-indexed per SPEC §3.1; the query term must hit title/body/tags.)*
 
 **T8.4 terminal-state exclusion.** `query "safekeep"` → `<id:3>` (done task) absent. `query "safekeep" --include-closed` → present. Archive `<id:1>` → it disappears from default results too.
 

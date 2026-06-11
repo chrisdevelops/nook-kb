@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const event: KindDef = {
   statuses: ["planned", "done", "cancelled"],
   defaultStatus: "planned",
+  terminalStatuses: ["cancelled"],
   description:
     "Calendar-ish event; occurred_at mirrors starts_at (CLI invariant)",
   payload: Type.Object(
