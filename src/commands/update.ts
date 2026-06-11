@@ -60,6 +60,13 @@ export function updateCommand(
   const body = args.body ?? (row.body as string);
   const now = ctx.clock().toISOString();
 
+  // Archival cascade (SPEC §4.1): project → archived drops its non-terminal
+  // part_of tasks in the same operation, one hop only.
+  const archiving =
+    row.kind === "project" &&
+    args.status === "archived" &&
+    row.status !== "archived";
+
   db.exec("BEGIN");
   try {
     db.run(
@@ -74,12 +81,38 @@ export function updateCommand(
       id
     );
     ftsUpsert(db, { id, title, body }, nodeTags(db, id)); // T4.2 re-index
+
+    let cascaded: { id: string; from: string; to: string }[] | undefined;
+    if (archiving) {
+      cascaded = db
+        .all(
+          `SELECT n.id, n.status FROM nodes n
+           JOIN edges e ON e.src = n.id AND e.dst = ? AND e.rel = 'part_of'
+           WHERE n.kind = 'task' AND n.deleted_at IS NULL
+             AND n.status IN ('open', 'in_progress')
+           ORDER BY n.id`,
+          id
+        )
+        .map((t) => ({
+          id: t.id as string,
+          from: t.status as string,
+          to: "dropped",
+        }));
+      for (const t of cascaded) {
+        db.run(
+          "UPDATE nodes SET status = 'dropped', updated_at = ? WHERE id = ?",
+          now,
+          t.id
+        );
+      }
+    }
     db.exec("COMMIT");
+
+    const updated = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
+    const res = nodeResponse(updated, nodeTags(db, id));
+    return cascaded === undefined ? res : { ...res, cascaded };
   } catch (e) {
     db.exec("ROLLBACK");
     throw e;
   }
-
-  const updated = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
-  return nodeResponse(updated, nodeTags(db, id));
 }

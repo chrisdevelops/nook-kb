@@ -1,4 +1,5 @@
 import type { Context } from "../context";
+import { createEdge } from "../edges";
 import { UserError } from "../errors";
 import { ftsUpsert } from "../fts";
 import { KINDS } from "../kinds";
@@ -12,6 +13,7 @@ export type AddArgs = {
   body?: string;
   payload?: string;
   tags: string[];
+  links: { dst: string; rel: string }[];
   status?: string;
   occurredAt?: string;
 };
@@ -49,17 +51,27 @@ export function addCommand(db: Db, ctx: Context, args: AddArgs): unknown {
     for (const tag of args.tags) {
       db.run("INSERT INTO tags (node_id, tag) VALUES (?, ?)", id, tag);
     }
+    // links inside the same transaction: a bad link aborts the whole add (T5.6)
+    const linksCreated = args.links.map((l) => {
+      createEdge(db, ctx, {
+        src: id,
+        dst: l.dst,
+        rel: l.rel,
+        origin: "direct",
+      });
+      return { dst: l.dst, rel: l.rel };
+    });
     ftsUpsert(db, { id, title: args.title, body }, args.tags);
     db.exec("COMMIT");
+
+    const row = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
+    return {
+      ...nodeResponse(row, args.tags),
+      links_created: linksCreated,
+      chunks_created: 0,
+    };
   } catch (e) {
     db.exec("ROLLBACK");
     throw e;
   }
-
-  const row = db.get("SELECT * FROM nodes WHERE id = ?", id)!;
-  return {
-    ...nodeResponse(row, args.tags),
-    links_created: [],
-    chunks_created: 0,
-  };
 }

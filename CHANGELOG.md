@@ -4,6 +4,8 @@
 
 ### Added
 
+- Edges & tags (#6): `add --link <id>:<rel>` (transactional — a bad link aborts the whole add), `mem link` (--weight) / `mem unlink`, relation registry with symmetric canonicalization (reverse relates_to → DUPLICATE_EDGE; directional reverses allowed), `mem tag`/`mem untag` (idempotent, full-set response, FTS re-sync), and the project-archival cascade: archiving drops non-terminal part_of tasks one hop, reported as `cascaded` in the update response. Soft-deleted endpoints reject linking.
+
 - Node lifecycle (#5): `mem get` (canonical node, `--with-body`, `--with-edges`), `mem update` (RFC 7386 merge-patch — null deletes the key — with whole-schema revalidation and FTS re-index), `mem delete` (soft, de-indexes), `mem restore` (re-indexes; idempotent on live nodes; NOT_FOUND once purged), `mem purge` (retention window flag > config > default, cascades edges/tags/suggestions/FTS). Soft-deleted nodes are immutable — every mutation fails NOT_FOUND; readable via `get` only. Config precedence contract (T1.1/T1.2) now covered end-to-end via purge.
 
 - Capture & find (#4): `mem add <kind>` with AJV payload validation (strict schemas, VALIDATION_FAILED on bad payloads, whole add is one transaction), status validation + per-kind defaults, tags, `--occurred-at`; contentful-FTS write-through; minimal `mem query <text>` — BM25 weighted title > tags > body, seven-key result contract with highlighted snippets, soft-deleted excluded, empty result is success.

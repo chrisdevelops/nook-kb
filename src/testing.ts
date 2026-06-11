@@ -38,9 +38,8 @@ export function makeUnmigratedContext(
 }
 
 /**
- * Standard graph fixture (TDD §3): 8 nodes, 3 edges, 3 tags.
- * Nodes go through the real add command; edges are seeded directly in SQL
- * until #6 ships `--link` / `mem link`, at which point this switches over.
+ * Standard graph fixture (TDD §3): 8 nodes, 3 edges, 3 tags — everything
+ * through the real add command, edges via --link.
  */
 export async function seedStandardGraph(ctx: Context): Promise<void> {
   const { runCommand } = await import("./run-command");
@@ -66,6 +65,8 @@ export async function seedStandardGraph(ctx: Context): Promise<void> {
     "open",
     "--payload",
     '{"due_at":"2026-02-01","priority":"high"}',
+    "--link",
+    `${testId(1)}:part_of`,
   ]); // <id:2>
   await add([
     "task",
@@ -73,6 +74,8 @@ export async function seedStandardGraph(ctx: Context): Promise<void> {
     "Invoice Safekeep milestone 1",
     "--status",
     "done",
+    "--link",
+    `${testId(1)}:part_of`,
   ]); // <id:3>
   await add([
     "person",
@@ -87,6 +90,8 @@ export async function seedStandardGraph(ctx: Context): Promise<void> {
     "Square delayed capture gotchas",
     "--body",
     "the payment capture window closes after seven days",
+    "--link",
+    `${testId(4)}:about`,
   ]); // <id:5>
   await add([
     "meal",
@@ -117,21 +122,6 @@ export async function seedStandardGraph(ctx: Context): Promise<void> {
     "--payload",
     '{"amount":2500,"currency":"CAD","direction":"income","category":"client-work"}',
   ]); // <id:8>
-
-  const { openDatabase } = await import("./sqlite");
-  const db = openDatabase(ctx.dbPath);
-  const edge = (src: number, dst: number, rel: string) =>
-    db.run(
-      "INSERT INTO edges (src, dst, rel, weight, origin, created_at) VALUES (?, ?, ?, 1.0, 'direct', ?)",
-      testId(src),
-      testId(dst),
-      rel,
-      "2026-01-01T00:00:00.000Z"
-    );
-  edge(2, 1, "part_of");
-  edge(3, 1, "part_of");
-  edge(5, 4, "about");
-  db.close();
 }
 
 /** `<id:n>` as written in TDD §1. */
