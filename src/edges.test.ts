@@ -174,11 +174,12 @@ describe("Item 7 — link / unlink / tag / untag / cascade", () => {
     expect(again.exitCode).toBe(0);
     expect(JSON.parse(again.stdout).tags).toEqual(["chargebacks", "disputes"]);
 
-    // tags are searchable after tagging (FTS re-synced)
+    // tags are searchable after tagging (FTS re-synced; top hit — expansion
+    // may trail neighbors)
     const hits = JSON.parse(
       (await runCommand(["query", "chargebacks"], ctx)).stdout
     );
-    expect(hits.map((h: { id: string }) => h.id)).toEqual([testId(5)]);
+    expect(hits[0].id).toBe(testId(5));
 
     const untagged = await runCommand(["untag", testId(5), "chargebacks"], ctx);
     expect(JSON.parse(untagged.stdout)).toEqual({

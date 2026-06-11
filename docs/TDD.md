@@ -74,8 +74,8 @@ Returned by `add`, `get`, `update`:
 | `link` | `{ "src", "dst", "rel", "weight", "origin" }` |
 | `unlink` | `{ "src", "dst", "rel", "removed": true }` |
 | `tag` / `untag` | `{ "id", "tags": [...] }` (full tag set after the operation) |
-| `query` | JSON array of `{ "id", "kind", "title", "snippet", "score", "hops", "via" }`. Phase 1: `hops` always `0`, `via` always `null`. `score` is a positive number; tests never assert its value, only presence and ordering. No-text listing mode: `score` and `snippet` are `null`, ordering is `occurred_at`→`created_at` descending. |
-| `related` | Phase 2; shape reserved: array of `{ "id", "kind", "title", "hops", "via" }` |
+| `query` | JSON array of `{ "id", "kind", "title", "snippet", "score", "hops", "via" }`. FTS seeds carry `hops:0`, `via:null`; hop-expanded hits carry `hops ≥ 1`, `snippet:null`, and `via`: array of `"<src> -<rel>-> <dst>"` strings naming each traversed edge in path order (stored direction). `score` is a positive number; tests never assert its value, only presence and ordering. No-text listing mode: `score` and `snippet` are `null`, ordering is `occurred_at`→`created_at` descending. *(Amended in Phase 2: hops/via were placeholder `0`/`null` in Phase 1.)* |
+| `related` | array of `{ "id", "kind", "title", "hops", "via" }` — no snippet or score. Edge neighbors carry `hops ≥ 1` and the `via` edge path; shared-tag weak relations carry `hops:null` and `via:["shared-tag:<tag>"]`. |
 | `kinds` | array of `{ "kind", "statuses": [...] \| null, "default_status": <s> \| null, "payload_schema": <JSON Schema> }`; `kinds <kind>` returns the single object |
 | `stats` | `{ "nodes": { "<kind>": n, ... }, "edges": n, "tags": n, "suggestions_pending": n, "deleted": n }` — kind counts cover live nodes only; soft-deleted nodes appear solely in `deleted` |
 | `export` | JSONL to stdout: one `{ "node": {...full incl. body, deleted_at...}, "edges_out": [...], "tags": [...] }` per line; soft-deleted nodes included |
@@ -254,6 +254,30 @@ All against standard graph unless noted.
 ### Item 10 — Skill README
 
 Not contract-tested. Manual gate: a fresh Claude Code session given only the README + binary must complete "capture a linked note, then find it" unaided.
+
+### Item 11 — `query` graph expansion (`--hops`, Phase 2)
+
+**T11.1 default 1-hop expansion.** Standard graph, `query "payment capture"` → `<id:5>` (seed, `hops:0`, `via:null`) then `<id:4>` (`hops:1`, `via:["<id:5> -about-> <id:4>"]`, `snippet:null`, positive score).
+
+**T11.2 depth bound + full path.** Note linked `derived_from` → `<id:4>` sits 2 hops from the seed: absent at `--hops 1`, present at `--hops 2` with `hops:2` and a two-element `via` in path order. **T11.2b** `--hops` outside integer 1..3 → `INVALID_ARGS`.
+
+**T11.3 traversal through closed.** Two live notes `part_of` an archived project: querying one finds the other at `--hops 2` (`via` names the archived hub); the hub itself is never a result. `--include-closed` lifts the result-level exclusion (hub appears, `hops:1`).
+
+**T11.4 soft-deleted block traversal.** Chain A—deleted—B: B unreachable, the deleted node absent as seed/result/intermediate, with and without `--include-closed`.
+
+**T11.5 ordering property.** Seed above 1-hop above 2-hop (hop decay); never score values.
+
+**T11.6 chunk dedup under expansion.** Term unique to one chunk → exactly that chunk (source and expansion-dragged siblings deduped). Tag matching only the source → exactly the source (dragged chunks never displace the real match). One row per document either way.
+
+### Item 12 — `related` (Phase 2)
+
+**T12.1 reserved shape.** Standard graph, `related <id:1>` → `<id:2>` and `<id:3>` (closed nodes fully visible here), each exactly `{ id, kind, title, hops, via }`, `hops:1`, `via` naming the edge.
+
+**T12.2 depth, ordering, limit.** Default depth 1; `--hops 2` reaches 2-hop neighbors ranked after 1-hop ones; `--limit` truncates.
+
+**T12.3 shared-tag weak relations.** Nodes sharing a tag with the root append after edge neighbors with `hops:null`, `via:["shared-tag:<tag>"]`.
+
+**T12.4 soft-deleted.** Deleted root → `NOT_FOUND`; deleted nodes absent as neighbors and as weak relations.
 
 ## 5. Pure-Function Contracts
 

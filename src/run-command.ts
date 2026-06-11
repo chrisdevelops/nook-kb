@@ -11,6 +11,7 @@ import { kindsCommand } from "./commands/kinds";
 import { linkCommand, unlinkCommand } from "./commands/link";
 import { tagCommand, untagCommand } from "./commands/tag";
 import { queryCommand, renderHuman } from "./commands/query";
+import { relatedCommand } from "./commands/related";
 import {
   backupCommand,
   exportCommand,
@@ -27,6 +28,19 @@ import type { Db } from "./sqlite";
 /** CAC yields a scalar for one flag occurrence, an array for several. */
 function many(v: string | string[] | undefined): string[] {
   return v === undefined ? [] : Array.isArray(v) ? v : [v];
+}
+
+/** `--hops` is 1..3 (SPEC §5.2: default 1, max 3). */
+function parseHops(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const hops = Number(raw);
+  if (!Number.isInteger(hops) || hops < 1 || hops > 3) {
+    throw new UserError(
+      "INVALID_ARGS",
+      "--hops must be an integer from 1 to 3"
+    );
+  }
+  return hops;
 }
 
 function errorJson(code: string, e: unknown): string {
@@ -198,6 +212,7 @@ export async function runCommand(
     .option("--since <iso>", "occurred_at/created_at lower bound")
     .option("--until <iso>", "occurred_at/created_at upper bound")
     .option("--limit <n>", "max results")
+    .option("--hops <n>", "graph expansion depth (1-3)")
     .option("--include-closed", "include terminal-state nodes")
     .option("--human", "markdown output")
     .action(
@@ -210,6 +225,7 @@ export async function runCommand(
           since?: string;
           until?: string;
           limit?: string;
+          hops?: string;
           includeClosed?: boolean;
           human?: boolean;
         }
@@ -223,7 +239,7 @@ export async function runCommand(
         }
         const db = openStore(ctx.dbPath, ctx.clock);
         try {
-          const hits = queryCommand(db, config, {
+          const hits = queryCommand(db, ctx, config, {
             text,
             kinds: many(opts.kind),
             tags: many(opts.tag),
@@ -231,6 +247,7 @@ export async function runCommand(
             since: opts.since,
             until: opts.until,
             limit,
+            hops: parseHops(opts.hops),
             includeClosed: opts.includeClosed,
           });
           stdout = opts.human ? renderHuman(hits) : JSON.stringify(hits);
@@ -239,6 +256,25 @@ export async function runCommand(
         }
       }
     );
+  cli
+    .command("related <id>", "ranked graph neighborhood")
+    .option("--hops <n>", "neighborhood depth (1-3)")
+    .option("--limit <n>", "max results")
+    .action((id: string, opts: { hops?: string; limit?: string }) => {
+      const limit = opts.limit === undefined ? undefined : Number(opts.limit);
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+        throw new UserError(
+          "INVALID_ARGS",
+          "--limit must be a positive integer"
+        );
+      }
+      withDb((db) =>
+        relatedCommand(db, ctx, config, id, {
+          hops: parseHops(opts.hops),
+          limit,
+        })
+      )();
+    });
   cli
     .command("kinds [kind]", "contract self-discovery")
     .action((kind?: string) => {
