@@ -18,5 +18,9 @@
     "prettier": "^3.5.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "cac": "^7.0.0",
+    "ulid": "^3.0.2"
   }
 }
