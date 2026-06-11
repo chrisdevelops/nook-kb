@@ -39,4 +39,26 @@ describe("Item 1 — config", () => {
     expect(res.exitCode).toBe(0);
     expect(res.stderr).toBe("");
   });
+
+  it("T1.1 config respected: purge.default_days 0 purges immediately", async () => {
+    const ctx = withConfig('{ "purge": { "default_days": 0 } }');
+    const { id } = JSON.parse(
+      (await runCommand(["add", "note", "--title", "doomed"], ctx)).stdout
+    );
+    await runCommand(["delete", id], ctx);
+
+    const res = await runCommand(["purge"], ctx);
+    expect(JSON.parse(res.stdout)).toEqual({ purged: 1 });
+  });
+
+  it("T1.2 flag beats config", async () => {
+    const ctx = withConfig('{ "purge": { "default_days": 0 } }');
+    const { id } = JSON.parse(
+      (await runCommand(["add", "note", "--title", "survivor"], ctx)).stdout
+    );
+    await runCommand(["delete", id], ctx);
+
+    const res = await runCommand(["purge", "--older-than", "365"], ctx);
+    expect(JSON.parse(res.stdout)).toEqual({ purged: 0 });
+  });
 });

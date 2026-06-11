@@ -1,5 +1,12 @@
 import { cac } from "cac";
 import { addCommand } from "./commands/add";
+import { getCommand } from "./commands/get";
+import {
+  deleteCommand,
+  purgeCommand,
+  restoreCommand,
+} from "./commands/lifecycle";
+import { updateCommand, type UpdateArgs } from "./commands/update";
 import { kindsCommand } from "./commands/kinds";
 import { queryCommand } from "./commands/query";
 import { statsCommand } from "./commands/stats";
@@ -23,9 +30,9 @@ export async function runCommand(
   let stderr = "";
   let exitCode = 0;
 
-  let warnings: string[] = [];
+  let config;
   try {
-    warnings = loadConfig(ctx.configPath).warnings;
+    config = loadConfig(ctx.configPath);
   } catch (e) {
     if (e instanceof ConfigError) {
       return { stdout: "", stderr: errorJson("SYSTEM", e), exitCode: 2 };
@@ -86,6 +93,48 @@ export async function runCommand(
       }
     );
   cli
+    .command("get <id>", "fetch one node")
+    .option("--with-edges", "include in/out edges")
+    .option("--with-body", "include full body")
+    .action((id: string, opts: { withEdges?: boolean; withBody?: boolean }) => {
+      withDb((db) => getCommand(db, id, opts))();
+    });
+  cli
+    .command("update <id>", "update a node")
+    .option("--title <title>", "new title")
+    .option("--body <md>", "new body")
+    .option("--payload-merge <json>", "RFC 7386 merge patch")
+    .option("--status <status>", "new status")
+    .option("--occurred-at <iso>", "new occurred_at")
+    .action((id: string, opts: UpdateArgs & Record<string, unknown>) => {
+      withDb((db) =>
+        updateCommand(db, ctx, id, {
+          title: opts.title,
+          body: opts.body,
+          payloadMerge: opts.payloadMerge,
+          status: opts.status,
+          occurredAt: opts.occurredAt,
+        })
+      )();
+    });
+  cli.command("delete <id>", "soft delete").action((id: string) => {
+    withDb((db) => deleteCommand(db, ctx, id))();
+  });
+  cli.command("restore <id>", "reverse a soft delete").action((id: string) => {
+    withDb((db) => restoreCommand(db, ctx, id))();
+  });
+  cli
+    .command("purge", "hard-delete old soft-deleted nodes")
+    .option("--older-than <days>", "retention window override")
+    .action((opts: { olderThan?: string }) => {
+      const days =
+        opts.olderThan === undefined ? undefined : Number(opts.olderThan);
+      if (days !== undefined && !Number.isFinite(days)) {
+        throw new UserError("INVALID_ARGS", "--older-than must be a number");
+      }
+      withDb((db) => purgeCommand(db, ctx, config, days))();
+    });
+  cli
     .command("query [text]", "retrieval: FTS + filters")
     .action((text?: string) => {
       withDb((db) => queryCommand(db, text ?? ""))();
@@ -113,8 +162,8 @@ export async function runCommand(
     }
   }
 
-  if (warnings.length > 0) {
-    stderr = [...warnings, stderr].filter(Boolean).join("\n");
+  if (config.warnings.length > 0) {
+    stderr = [...config.warnings, stderr].filter(Boolean).join("\n");
   }
   return { stdout, stderr, exitCode };
 }

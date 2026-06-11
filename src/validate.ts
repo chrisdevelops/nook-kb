@@ -28,6 +28,24 @@ export function validatePayload(kind: string, payload: unknown): void {
   }
 }
 
+/** Status must belong to the kind's vocabulary; statusless kinds accept none. */
+export function validateStatus(kind: string, status: string): void {
+  const def = KINDS[kind];
+  if (!def) throw new UserError("UNKNOWN_KIND", `unknown kind "${kind}"`);
+  if (def.statuses === null) {
+    throw new UserError(
+      "INVALID_STATUS",
+      `kind "${kind}" has no status vocabulary`
+    );
+  }
+  if (!def.statuses.includes(status)) {
+    throw new UserError(
+      "INVALID_STATUS",
+      `invalid status "${status}" for kind "${kind}" (expected ${def.statuses.join("|")})`
+    );
+  }
+}
+
 /** Payload arrives as a JSON string from the CLI; parse errors are user errors. */
 export function parsePayload(raw: string | undefined): unknown {
   if (raw === undefined) return {};

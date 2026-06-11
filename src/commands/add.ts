@@ -2,8 +2,9 @@ import type { Context } from "../context";
 import { UserError } from "../errors";
 import { ftsUpsert } from "../fts";
 import { KINDS } from "../kinds";
+import { nodeResponse } from "../nodes";
 import type { Db } from "../sqlite";
-import { parsePayload, validatePayload } from "../validate";
+import { parsePayload, validatePayload, validateStatus } from "../validate";
 
 export type AddArgs = {
   kind: string;
@@ -15,44 +16,11 @@ export type AddArgs = {
   occurredAt?: string;
 };
 
-/** Canonical node object (TDD §2.2) from a nodes row. */
-export function nodeResponse(
-  row: Record<string, unknown>,
-  tags: string[]
-): Record<string, unknown> {
-  return {
-    id: row.id,
-    kind: row.kind,
-    title: row.title,
-    body_length: (row.body as string).length,
-    payload: JSON.parse(row.payload as string),
-    status: row.status,
-    tags,
-    occurred_at: row.occurred_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    deleted_at: row.deleted_at,
-  };
-}
-
 export function addCommand(db: Db, ctx: Context, args: AddArgs): unknown {
   const def = KINDS[args.kind];
   if (!def) throw new UserError("UNKNOWN_KIND", `unknown kind "${args.kind}"`);
 
-  if (args.status !== undefined) {
-    if (def.statuses === null) {
-      throw new UserError(
-        "INVALID_STATUS",
-        `kind "${args.kind}" has no status vocabulary`
-      );
-    }
-    if (!def.statuses.includes(args.status)) {
-      throw new UserError(
-        "INVALID_STATUS",
-        `invalid status "${args.status}" for kind "${args.kind}" (expected ${def.statuses.join("|")})`
-      );
-    }
-  }
+  if (args.status !== undefined) validateStatus(args.kind, args.status);
   const status = args.status ?? def.defaultStatus;
 
   const payloadValue = parsePayload(args.payload);
