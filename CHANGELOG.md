@@ -4,6 +4,8 @@
 
 ### Added
 
+- `report tasks [--project]` (#16): open and in-progress tasks ordered by due date (undated last), then priority high > med > low (missing last), then capture order. `--project` scopes via `part_of` edges and accepts a project id or exact case-insensitive title (unknown → `NOT_FOUND`, ambiguous → `INVALID_ARGS`); the resolved project is echoed and every row carries its live `part_of` projects. Tasks dropped by the project-archival cascade vanish from the report while the archived project still resolves as a scope. JSON or `--human` markdown.
+
 - `report finance [--month]` (#15): income vs expenses grouped by transaction category (missing categories bucket as `uncategorized`, totals cent-rounded, `net` included), plus a subscription roll-up — `monthly_burn` projects active subscriptions with yearly cadences normalized to amount/12, while cancelled ones stay listed with their status. `--month YYYY-MM` scopes transactions to the calendar month on `occurred_at` falling back to `created_at` (malformed values are `INVALID_ARGS`); the roll-up always reflects current state. JSON or `--human` markdown.
 
 - `mem report` (#14): named reports over the store, JSON by default or `--human` markdown; unknown names are `INVALID_ARGS`. First report: `medical-history [--since]` — visits and lab panels in chronological order, symptoms grouped by payload name with frequency and a first-vs-last `severity_trend`, and med-adjacent notes (an edge to a live health-kind node, or a `health`/`health/…` tag — definition added to SPEC §5.3). `--since` filters every section on `occurred_at` falling back to `created_at`; soft-deleted nodes are excluded everywhere, including the adjacency hop.

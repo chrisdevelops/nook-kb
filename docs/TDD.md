@@ -335,6 +335,24 @@ Contracts from issue #15 ACs over SPEC §5.3. Money values are contracted exactl
 
 **T15.5 `--human`.** Markdown, not JSON: Income / Expenses / Subscriptions sections naming categories, vendors, and the month scope.
 
+### Item 16 — `report tasks` (Phase 3)
+
+Contracts from issue #16 ACs over SPEC §5.3. Per §6: ordering asserted as properties over ids, never scores.
+
+**T16.1 non-terminal only.** `open` and `in_progress` tasks appear with `status`, `due_at`, `priority` (`null` when the payload omits them); `done`/`dropped` never do.
+
+**T16.2 ordering.** `due_at` ascending with undated tasks last; within a date, priority `high > med > low` with missing priority last; capture order (`created_at`) as the stable tiebreak.
+
+**T16.3 `--project` scope.** Accepts a project id or an exact title (case-insensitive, live projects — the wikilink rule); scoping follows `part_of` edges, so unrelated and project-less tasks drop out; the resolved `{id, title}` is echoed as `project` (`null` unscoped); every task row carries `projects` (its live `part_of` project neighbors, title-ascending; `[]` when none).
+
+**T16.4 resolution errors.** Unknown id/title → `NOT_FOUND`; a title matching more than one live project → `INVALID_ARGS`.
+
+**T16.5 archival cascade.** Archiving a project (Item 7 cascade flips its open/in_progress `part_of` tasks to `dropped`) removes those tasks from the report; the archived project itself still resolves for `--project` (closed nodes stay visible to reports, §5.2) — the scope is just empty.
+
+**T16.6 soft-deleted.** Deleted tasks never appear (verified by mutation: dropping the `deleted_at` guard fails it); a deleted project no longer resolves for `--project` (`NOT_FOUND`) and vanishes from rows' `projects`.
+
+**T16.7 `--human`.** Markdown, not JSON, naming title, due date, priority, status, and project scope.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`

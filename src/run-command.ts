@@ -319,11 +319,17 @@ export async function runCommand(
     .command("report <name>", "named report over the store")
     .option("--since <iso>", "occurred_at/created_at lower bound")
     .option("--month <yyyy-mm>", "calendar month scope (finance)")
+    .option("--project <ref>", "project id or exact title (tasks)")
     .option("--human", "markdown output")
     .action(
       (
         name: string,
-        opts: { since?: string; month?: string; human?: boolean }
+        opts: {
+          since?: string;
+          month?: string;
+          project?: string;
+          human?: boolean;
+        }
       ) => {
         const db = openStore(ctx.dbPath, ctx.clock);
         try {
@@ -331,6 +337,7 @@ export async function runCommand(
           stdout = reportCommand(db, name, {
             since: opts.since,
             month: opts.month,
+            project: opts.project,
             human: opts.human,
           });
         } finally {
