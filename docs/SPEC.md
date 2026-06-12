@@ -264,10 +264,12 @@ The compounding property: seeds are roughly stable over time, but expansion reac
 
 `mem report <name>` runs named SQL over the store, JSON or `--human` markdown:
 
-- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor. Med-adjacent: a note with an edge (either direction) to a live health-kind node (meal/symptom/visit/lab_result — the §5.1 set) or a `health`/`health/…` tag.
+- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor. Med-adjacent: a note with an edge (either direction) to a live health-kind node (meal/symptom/visit/lab_result — the §5.1 set) or a `health`/`health/…` tag (case-sensitive, like all tag matching). `--since` must be an ISO date or timestamp.
 - `finance [--month]` — income vs expenses by category, subscription roll-up with projected monthly burn. `--month` (YYYY-MM) scopes transactions to the calendar month (occurred_at falling back to created_at); the subscription roll-up always reflects current state. Uncategorized transactions bucket as `uncategorized`; cancelled subscriptions are excluded from the burn but stay listed; yearly cadences normalize as amount/12.
-- `tasks [--project]` — open/in-progress ordered by due date (undated last) then priority (high > med > low, missing last). `--project` accepts a project id or exact title (case-insensitive, live projects; ambiguous title is an error) and scopes via `part_of` edges; rows carry their live `part_of` projects.
+- `tasks [--project]` — open/in-progress ordered by due date (the calendar date of `due_at`; undated last) then priority (high > med > low, missing last). `--project` accepts a project id or exact title (case-insensitive, live projects; ambiguous title is an error) and scopes via `part_of` edges; rows carry their live `part_of` projects.
 - `health-correlations [--since]` — co-occurrence counts between symptom kinds and meal items/tags within configurable windows (`suggest.windows`, §2.1 — shared with the suggester; default same-day and next-day). Output is explicitly labeled co-occurrence, not causation; agents interpret.
+
+Scope flags are owned per report: passing a flag to a report that does not take it (e.g. `tasks --since`) is `INVALID_ARGS`, never silently ignored.
 
 Reports live in `src/reports/` one file per report; adding a report = MINOR bump.
 

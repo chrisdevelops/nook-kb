@@ -51,13 +51,14 @@ export function tasks(db: Db, flags: { project?: string } = {}): TasksReport {
                       WHERE e.src = nodes.id AND e.rel = 'part_of' AND e.dst = ?)`;
   const scopeParams = project === null ? [] : [project.id];
 
-  // due-date urgency first (undated last), then priority, then capture order
+  // due-DATE urgency first (undated last; intra-day times never outrank
+  // priority), then priority, then capture order
   const rows = db
     .all(
       `SELECT id, title, status, due_at, payload FROM nodes
        WHERE kind = 'task' AND deleted_at IS NULL
          AND status IN ('open', 'in_progress')${scopeSql}
-       ORDER BY due_at IS NULL ASC, due_at ASC,
+       ORDER BY due_at IS NULL ASC, substr(due_at, 1, 10) ASC,
                 CASE json_extract(payload, '$.priority')
                   WHEN 'high' THEN 0 WHEN 'med' THEN 1 WHEN 'low' THEN 2
                   ELSE 3

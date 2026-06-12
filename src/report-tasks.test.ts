@@ -1,22 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { runCommand } from "./run-command";
-import { makeTestContext } from "./testing";
+import { addNode as add, makeTestContext, reportJson } from "./testing";
 import type { Context } from "./context";
 
-async function add(ctx: Context, args: string[]): Promise<{ id: string }> {
-  const res = await runCommand(["add", ...args], ctx);
-  if (res.exitCode !== 0) throw new Error(`add failed: ${res.stderr}`);
-  return JSON.parse(res.stdout);
-}
-
-async function report(
-  ctx: Context,
-  args: string[] = []
-): Promise<Record<string, unknown>> {
-  const res = await runCommand(["report", "tasks", ...args], ctx);
-  expect(res.exitCode).toBe(0);
-  return JSON.parse(res.stdout);
-}
+const report = (ctx: Context, args: string[] = []) =>
+  reportJson(ctx, "tasks", args);
 
 function addTask(
   ctx: Context,
@@ -220,5 +208,25 @@ describe("Item 16 — report tasks (Phase 3)", () => {
     expect(res.stdout).toContain("2026-02-01");
     expect(res.stdout).toContain("high");
     expect(res.stdout).toContain("in_progress");
+  });
+
+  it("T16.8 priority breaks ties within a calendar date even when due_at carries times", async () => {
+    const ctx = makeTestContext();
+    const eveningHigh = await addTask(ctx, "Evening high", {
+      payload: { due_at: "2026-02-01T17:00", priority: "high" },
+    });
+    const morningLow = await addTask(ctx, "Morning low", {
+      payload: { due_at: "2026-02-01T08:00", priority: "low" },
+    });
+    const nextDay = await addTask(ctx, "Next day", {
+      payload: { due_at: "2026-02-02", priority: "high" },
+    });
+
+    const out = await report(ctx);
+    expect((out.tasks as Array<{ id: string }>).map((t) => t.id)).toEqual([
+      eveningHigh.id, // same date as morningLow: priority wins, not time of day
+      morningLow.id,
+      nextDay.id,
+    ]);
   });
 });

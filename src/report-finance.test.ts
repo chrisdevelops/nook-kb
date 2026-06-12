@@ -1,22 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { runCommand } from "./run-command";
-import { makeTestContext } from "./testing";
+import { addNode as add, makeTestContext, reportJson } from "./testing";
 import type { Context } from "./context";
 
-async function add(ctx: Context, args: string[]): Promise<{ id: string }> {
-  const res = await runCommand(["add", ...args], ctx);
-  if (res.exitCode !== 0) throw new Error(`add failed: ${res.stderr}`);
-  return JSON.parse(res.stdout);
-}
-
-async function report(
-  ctx: Context,
-  args: string[] = []
-): Promise<Record<string, unknown>> {
-  const res = await runCommand(["report", "finance", ...args], ctx);
-  expect(res.exitCode).toBe(0);
-  return JSON.parse(res.stdout);
-}
+const report = (ctx: Context, args: string[] = []) =>
+  reportJson(ctx, "finance", args);
 
 function addTx(
   ctx: Context,
@@ -246,5 +234,36 @@ describe("Item 15 — report finance (Phase 3)", () => {
     expect(res.stdout).toContain("food");
     expect(res.stdout).toContain("## Subscriptions");
     expect(res.stdout).toContain("Streamflix");
+  });
+
+  it("T15.6 category ordering uses the displayed cent totals, not raw float sums", async () => {
+    const ctx = makeTestContext();
+    // 0.1 + 0.2 accumulates to 0.30000000000000004 as a REAL sum; the
+    // category-ascending tiebreak must apply to the displayed 0.30s
+    await addTx(ctx, "Tea", {
+      amount: 0.1,
+      direction: "expense",
+      category: "zfood",
+    });
+    await addTx(ctx, "Gum", {
+      amount: 0.2,
+      direction: "expense",
+      category: "zfood",
+    });
+    await addTx(ctx, "Mint", {
+      amount: 0.3,
+      direction: "expense",
+      category: "afood",
+    });
+
+    const out = await report(ctx);
+    const expenses = out.expenses as {
+      by_category: Array<{ category: string; total: number }>;
+    };
+    expect(expenses.by_category.map((c) => c.category)).toEqual([
+      "afood",
+      "zfood",
+    ]);
+    expect(expenses.by_category.map((c) => c.total)).toEqual([0.3, 0.3]);
   });
 });

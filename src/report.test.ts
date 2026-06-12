@@ -1,22 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { runCommand } from "./run-command";
-import { makeTestContext } from "./testing";
+import { addNode as add, makeTestContext, reportJson } from "./testing";
 import type { Context } from "./context";
 
-async function add(ctx: Context, args: string[]): Promise<{ id: string }> {
-  const res = await runCommand(["add", ...args], ctx);
-  if (res.exitCode !== 0) throw new Error(`add failed: ${res.stderr}`);
-  return JSON.parse(res.stdout);
-}
-
-async function report(
-  ctx: Context,
-  args: string[] = []
-): Promise<Record<string, unknown>> {
-  const res = await runCommand(["report", "medical-history", ...args], ctx);
-  expect(res.exitCode).toBe(0);
-  return JSON.parse(res.stdout);
-}
+const report = (ctx: Context, args: string[] = []) =>
+  reportJson(ctx, "medical-history", args);
 
 describe("Item 14 — report medical-history (Phase 3)", () => {
   it("T14.1 visits in chronological order with payload fields", async () => {
@@ -198,6 +186,14 @@ describe("Item 14 — report medical-history (Phase 3)", () => {
       "--body",
       "client work, nothing medical",
     ]);
+    // tag matching is case-sensitive, like every other tag comparison
+    await add(ctx, [
+      "note",
+      "--title",
+      "Wrong-case tag",
+      "--tag",
+      "Health/meds",
+    ]);
 
     const out = await report(ctx);
     const notes = out.notes as Array<Record<string, unknown>>;
@@ -363,5 +359,38 @@ describe("Item 14 — report medical-history (Phase 3)", () => {
     const res = await runCommand(["report", "no-such-report"], ctx);
     expect(res.exitCode).toBe(1);
     expect(JSON.parse(res.stderr).error.code).toBe("INVALID_ARGS");
+  });
+
+  it("T14.9 a flag belonging to a different report → INVALID_ARGS, never silently ignored", async () => {
+    const ctx = makeTestContext();
+    const wrong: Array<[string, string, string]> = [
+      ["medical-history", "--month", "2026-02"],
+      ["medical-history", "--project", "Safekeep"],
+      ["finance", "--since", "2026-01-01"],
+      ["finance", "--project", "Safekeep"],
+      ["tasks", "--since", "2026-01-01"],
+      ["tasks", "--month", "2026-02"],
+    ];
+    for (const [name, flag, value] of wrong) {
+      const res = await runCommand(["report", name, flag, value], ctx);
+      expect(res.exitCode, `${name} ${flag}`).toBe(1);
+      expect(JSON.parse(res.stderr).error.code).toBe("INVALID_ARGS");
+    }
+  });
+
+  it("T14.10 malformed --since → INVALID_ARGS; date-only and full ISO accepted", async () => {
+    const ctx = makeTestContext();
+    for (const bad of ["march", "05/01/2026", "2026-13-01", "2026-02-30"]) {
+      const res = await runCommand(
+        ["report", "medical-history", "--since", bad],
+        ctx
+      );
+      expect(res.exitCode, bad).toBe(1);
+      expect(JSON.parse(res.stderr).error.code).toBe("INVALID_ARGS");
+    }
+    for (const good of ["2026-02-01", "2026-02-01T09:00:00.000Z"]) {
+      const out = await report(ctx, ["--since", good]);
+      expect(out.since).toBe(good);
+    }
   });
 });

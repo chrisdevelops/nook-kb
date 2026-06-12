@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Post-review hardening (7-angle review of the Phase 3 diff, 5 confirmed findings fixed): report scope flags are now owned per report — `tasks --since`, `finance --project`, etc. are `INVALID_ARGS` instead of silently ignored (SPEC §5.3 amended); `medical-history --since` validates ISO dates/timestamps instead of letting prose or `05/01/2026` lexicographically mis-filter with exit 0; med-adjacent tag matching is fully case-sensitive (the `health/…` LIKE was ASCII case-insensitive, splitting `Health` vs `Health/meds` treatment); tasks ordering compares the calendar date of `due_at` so intra-day times never outrank priority; finance category ordering uses the displayed cent-rounded totals, fixing the category-ascending tiebreak under float residue. Plus cleanups: shared `validateSince`/`sinceFilter` in `src/reports/shared.ts` (fragment + bind params travel together), and the per-test-file `add()`/`report()` helpers promoted to `testing.ts` (`addNode`/`reportJson`). Health-kinds registry promotion and registry-derived non-terminal statuses deferred to the #17 slice.
+
 ### Added
 
 - `report tasks [--project]` (#16): open and in-progress tasks ordered by due date (undated last), then priority high > med > low (missing last), then capture order. `--project` scopes via `part_of` edges and accepts a project id or exact case-insensitive title (unknown → `NOT_FOUND`, ambiguous → `INVALID_ARGS`); the resolved project is echoed and every row carries its live `part_of` projects. Tasks dropped by the project-archival cascade vanish from the report while the archived project still resolves as a scope. JSON or `--human` markdown.

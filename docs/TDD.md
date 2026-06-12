@@ -311,7 +311,7 @@ Contracts from issue #14 ACs over SPEC §5.3. Per §6: ordering properties and p
 
 **T14.3 labs.** `lab_result` nodes as chronological panels; `panel` and the `results` marker rows (value/unit/ref bounds) pass through intact.
 
-**T14.4 med-adjacent notes.** A note qualifies via an edge (either direction) to a **live** health-kind node (`meal`/`symptom`/`visit`/`lab_result` — the suggester's set, §5.1) or a `health`/`health/…` tag; notes with neither never appear. Output rows carry `body` (the content is the point of a doctor handover).
+**T14.4 med-adjacent notes.** A note qualifies via an edge (either direction) to a **live** health-kind node (`meal`/`symptom`/`visit`/`lab_result` — the suggester's set, §5.1) or a `health`/`health/…` tag — **case-sensitive**, like every other tag comparison (`Health/meds` does not qualify); notes with neither never appear. Output rows carry `body` (the content is the point of a doctor handover).
 
 **T14.5 `--since`.** `COALESCE(occurred_at, created_at) >= cutoff` applied to every section; symptom counts and trends reflect the filtered window only; `since` is echoed in the response (`null` without the flag).
 
@@ -320,6 +320,10 @@ Contracts from issue #14 ACs over SPEC §5.3. Per §6: ordering properties and p
 **T14.7 `--human`.** Markdown, not JSON: Visits / Symptoms / Lab results / Notes sections naming the underlying data.
 
 **T14.8 unknown report.** `report no-such-report` → `INVALID_ARGS`, exit 1.
+
+**T14.9 foreign scope flags rejected (post-review).** A scope flag belonging to a different report (`medical-history --month/--project`, `finance --since/--project`, `tasks --since/--month`) → `INVALID_ARGS`, never silently ignored.
+
+**T14.10 `--since` validation (post-review).** Prose, non-ISO locales, and impossible dates (`march`, `05/01/2026`, `2026-13-01`, `2026-02-30`) → `INVALID_ARGS`; ISO date-only and full timestamps are accepted and echoed.
 
 ### Item 15 — `report finance` (Phase 3)
 
@@ -335,6 +339,8 @@ Contracts from issue #15 ACs over SPEC §5.3. Money values are contracted exactl
 
 **T15.5 `--human`.** Markdown, not JSON: Income / Expenses / Subscriptions sections naming categories, vendors, and the month scope.
 
+**T15.6 ordering on displayed totals (post-review).** Category ordering applies to the cent-rounded totals the report emits, not raw float sums: categories displaying equal totals (REAL residue like 0.1+0.2 vs 0.3) honor the category-ascending tiebreak.
+
 ### Item 16 — `report tasks` (Phase 3)
 
 Contracts from issue #16 ACs over SPEC §5.3. Per §6: ordering asserted as properties over ids, never scores.
@@ -342,6 +348,8 @@ Contracts from issue #16 ACs over SPEC §5.3. Per §6: ordering asserted as prop
 **T16.1 non-terminal only.** `open` and `in_progress` tasks appear with `status`, `due_at`, `priority` (`null` when the payload omits them); `done`/`dropped` never do.
 
 **T16.2 ordering.** `due_at` ascending with undated tasks last; within a date, priority `high > med > low` with missing priority last; capture order (`created_at`) as the stable tiebreak.
+
+**T16.8 date precision (post-review).** "Within a date" means the calendar date (first 10 chars of `due_at`): when due_at values carry times, priority still decides inside the same date — intra-day times never outrank priority.
 
 **T16.3 `--project` scope.** Accepts a project id or an exact title (case-insensitive, live projects — the wikilink rule); scoping follows `part_of` edges, so unrelated and project-less tasks drop out; the resolved `{id, title}` is echoed as `project` (`null` unscoped); every task row carries `projects` (its live `part_of` project neighbors, title-ascending; `[]` when none).
 

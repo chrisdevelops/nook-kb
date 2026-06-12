@@ -37,16 +37,37 @@ export function makeUnmigratedContext(
   return bareContext(overrides);
 }
 
+/** `mem add` through the real CLI; throws on a non-zero exit. */
+export async function addNode(
+  ctx: Context,
+  args: string[]
+): Promise<{ id: string }> {
+  const { runCommand } = await import("./run-command");
+  const res = await runCommand(["add", ...args], ctx);
+  if (res.exitCode !== 0) throw new Error(`add failed: ${res.stderr}`);
+  return JSON.parse(res.stdout);
+}
+
+/** `mem report <name>` parsed as JSON; throws on a non-zero exit. */
+export async function reportJson(
+  ctx: Context,
+  name: string,
+  args: string[] = []
+): Promise<Record<string, unknown>> {
+  const { runCommand } = await import("./run-command");
+  const res = await runCommand(["report", name, ...args], ctx);
+  if (res.exitCode !== 0) {
+    throw new Error(`report ${name} failed: ${res.stderr}`);
+  }
+  return JSON.parse(res.stdout);
+}
+
 /**
  * Standard graph fixture (TDD §3): 8 nodes, 3 edges, 3 tags — everything
  * through the real add command, edges via --link.
  */
 export async function seedStandardGraph(ctx: Context): Promise<void> {
-  const { runCommand } = await import("./run-command");
-  const add = async (args: string[]) => {
-    const res = await runCommand(["add", ...args], ctx);
-    if (res.exitCode !== 0) throw new Error(`seed failed: ${res.stderr}`);
-  };
+  const add = (args: string[]) => addNode(ctx, args);
 
   await add([
     "project",

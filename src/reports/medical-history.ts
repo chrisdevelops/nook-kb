@@ -1,4 +1,5 @@
 import type { Db } from "../sqlite";
+import { sinceFilter, validateSince } from "./shared";
 
 type VisitPayload = {
   provider: string;
@@ -72,19 +73,15 @@ function severityTrend(
   return last > first ? "rising" : last < first ? "falling" : "stable";
 }
 
-// §5.2 convention: --since applies to occurred_at falling back to created_at
-const sinceSql = (since: string | null, alias = "") =>
-  since === null
-    ? ""
-    : ` AND COALESCE(${alias}occurred_at, ${alias}created_at) >= ?`;
-
 /** Live nodes of one kind, chronological ascending, optionally since a cutoff. */
 function liveRows(db: Db, kind: string, since: string | null) {
+  const cutoff = sinceFilter(since);
   return db.all(
     `SELECT id, title, payload, occurred_at, created_at FROM nodes
-     WHERE kind = ? AND deleted_at IS NULL${sinceSql(since)}
+     WHERE kind = ? AND deleted_at IS NULL${cutoff.sql}
      ORDER BY COALESCE(occurred_at, created_at) ASC`,
-    ...(since === null ? [kind] : [kind, since])
+    kind,
+    ...cutoff.params
   );
 }
 
@@ -92,7 +89,7 @@ export function medicalHistory(
   db: Db,
   flags: { since?: string } = {}
 ): MedicalHistoryReport {
-  const since = flags.since ?? null;
+  const since = validateSince(flags.since);
 
   const visits = liveRows(db, "visit", since).map((r) => {
     const p = JSON.parse(r.payload as string) as VisitPayload;
@@ -143,6 +140,7 @@ export function medicalHistory(
 
   // "med-adjacent": an edge (either direction) to a live health-kind node,
   // or a health tag — the same health-kind set the suggester uses.
+  const notesCutoff = sinceFilter(since, "n.");
   const notes = db
     .all(
       `SELECT n.id, n.title, n.body, n.occurred_at, n.created_at FROM nodes n
@@ -157,11 +155,12 @@ export function medicalHistory(
            )
            OR EXISTS (
              SELECT 1 FROM tags t
-             WHERE t.node_id = n.id AND (t.tag = 'health' OR t.tag LIKE 'health/%')
+             WHERE t.node_id = n.id
+               AND (t.tag = 'health' OR substr(t.tag, 1, 7) = 'health/')
            )
-         )${sinceSql(since, "n.")}
+         )${notesCutoff.sql}
        ORDER BY COALESCE(n.occurred_at, n.created_at) ASC`,
-      ...(since === null ? [] : [since])
+      ...notesCutoff.params
     )
     .map((r) => ({
       id: r.id as string,

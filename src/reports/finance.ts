@@ -45,7 +45,7 @@ export function finance(db: Db, flags: { month?: string } = {}): FinanceReport {
          WHERE kind = 'transaction' AND deleted_at IS NULL
            AND json_extract(payload, '$.direction') = ?${monthSql}
          GROUP BY category
-         ORDER BY total DESC, category ASC`,
+         ORDER BY ROUND(SUM(amount), 2) DESC, category ASC`,
         direction,
         ...monthParams
       )
