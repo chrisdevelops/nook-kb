@@ -334,7 +334,7 @@ export async function runCommand(
         const db = openStore(ctx.dbPath, ctx.clock);
         try {
           // reportCommand renders its own output (JSON or --human markdown)
-          stdout = reportCommand(db, name, {
+          stdout = reportCommand(db, config, name, {
             since: opts.since,
             month: opts.month,
             project: opts.project,

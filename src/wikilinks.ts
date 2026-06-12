@@ -10,6 +10,36 @@ export type WikilinkResolution = {
 const WIKILINK = /\[\[([^[\]\n]+)\]\]/g;
 
 /**
+ * The reference-resolution rule (SPEC §5.1): an exact id of a live node
+ * wins, else live nodes whose title matches exactly, case-insensitively —
+ * optionally scoped to one kind. Callers interpret zero/many matches
+ * (wikilinks: unresolved; report --project: NOT_FOUND/ambiguous).
+ */
+export function resolveNodeRef(
+  db: Db,
+  ref: string,
+  kind?: string
+): { id: string; title: string }[] {
+  const kindSql = kind === undefined ? "" : " AND kind = ?";
+  const kindParams = kind === undefined ? [] : [kind];
+  const byId = db.get(
+    `SELECT id, title FROM nodes
+     WHERE id = ? AND deleted_at IS NULL${kindSql}`,
+    ref,
+    ...kindParams
+  );
+  if (byId) return [{ id: byId.id as string, title: byId.title as string }];
+  return db
+    .all(
+      `SELECT id, title FROM nodes
+       WHERE title = ? COLLATE NOCASE AND deleted_at IS NULL${kindSql}`,
+      ref,
+      ...kindParams
+    )
+    .map((r) => ({ id: r.id as string, title: r.title as string }));
+}
+
+/**
  * Resolve body wikilinks to edge targets (SPEC §5.1): `[[<id>]]` or
  * `[[Exact Title]]` against live nodes. Pure-function seam like the
  * chunker — persistence and diffing live with the callers.
@@ -19,20 +49,9 @@ export function resolveWikilinks(body: string, db: Db): WikilinkResolution {
   const unresolved: string[] = [];
   for (const match of body.matchAll(WIKILINK)) {
     const target = match[1]!;
-    const byId = db.get(
-      "SELECT id FROM nodes WHERE id = ? AND deleted_at IS NULL",
-      target
-    );
-    if (byId) {
-      edges.push({ dst: byId.id as string });
-      continue;
-    }
-    const byTitle = db.all(
-      "SELECT id FROM nodes WHERE title = ? COLLATE NOCASE AND deleted_at IS NULL",
-      target
-    );
-    if (byTitle.length === 1) {
-      edges.push({ dst: byTitle[0]!.id as string });
+    const matches = resolveNodeRef(db, target);
+    if (matches.length === 1) {
+      edges.push({ dst: matches[0]!.id });
     } else {
       unresolved.push(target); // zero or many: never guess (SPEC §5.1)
     }

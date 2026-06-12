@@ -1,3 +1,4 @@
+import { HEALTH_KINDS } from "../kinds";
 import type { Db } from "../sqlite";
 import { sinceFilter, validateSince } from "./shared";
 
@@ -141,6 +142,7 @@ export function medicalHistory(
   // "med-adjacent": an edge (either direction) to a live health-kind node,
   // or a health tag — the same health-kind set the suggester uses.
   const notesCutoff = sinceFilter(since, "n.");
+  const healthKindMarks = HEALTH_KINDS.map(() => "?").join(", ");
   const notes = db
     .all(
       `SELECT n.id, n.title, n.body, n.occurred_at, n.created_at FROM nodes n
@@ -150,7 +152,7 @@ export function medicalHistory(
              SELECT 1 FROM edges e
              JOIN nodes h ON h.id = CASE WHEN e.src = n.id THEN e.dst ELSE e.src END
              WHERE (e.src = n.id OR e.dst = n.id)
-               AND h.kind IN ('visit', 'symptom', 'lab_result', 'meal')
+               AND h.kind IN (${healthKindMarks})
                AND h.deleted_at IS NULL
            )
            OR EXISTS (
@@ -160,6 +162,7 @@ export function medicalHistory(
            )
          )${notesCutoff.sql}
        ORDER BY COALESCE(n.occurred_at, n.created_at) ASC`,
+      ...HEALTH_KINDS,
       ...notesCutoff.params
     )
     .map((r) => ({

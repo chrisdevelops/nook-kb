@@ -41,3 +41,16 @@ export const KINDS: Record<string, KindDef> = {
 };
 
 export type { KindDef };
+
+/** The health-kind set (SPEC §5.1) — one definition for suggester + reports. */
+export const HEALTH_KINDS = Object.entries(KINDS)
+  .filter(([, def]) => def.health)
+  .map(([name]) => name);
+
+/** Statuses outside terminalStatuses; [] for statusless kinds. */
+export function nonTerminalStatuses(kind: string): string[] {
+  const def = KINDS[kind];
+  if (!def?.statuses) return [];
+  const terminal = def.terminalStatuses ?? [];
+  return def.statuses.filter((s) => !terminal.includes(s));
+}

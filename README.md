@@ -20,7 +20,7 @@ mem delete <id>              |   mem restore <id>
 mem suggest [--limit n]      # compute link suggestions (run ad hoc or on a heartbeat)
 mem suggest review [--limit n] | mem suggest accept <src> <dst> | mem suggest reject <src> <dst>
 mem report <name> [--human]  # medical-history [--since iso] | finance [--month yyyy-mm]
-                             # | tasks [--project <id|title>]
+                             # | tasks [--project <id|title>] | health-correlations [--since iso]
 mem kinds [kind]   # payload contracts, statuses, defaults — self-discover here
 ```
 

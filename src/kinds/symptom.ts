@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const symptom: KindDef = {
   statuses: null,
   defaultStatus: null,
+  health: true,
   description: "A symptom occurrence; severity 1–5",
   payload: Type.Object(
     {

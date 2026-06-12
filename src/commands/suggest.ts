@@ -2,10 +2,8 @@ import type { Config } from "../config";
 import type { Context } from "../context";
 import { createEdge } from "../edges";
 import { UserError } from "../errors";
+import { HEALTH_KINDS } from "../kinds";
 import type { Db } from "../sqlite";
-
-/** Cross-kind temporal proximity is scoped to the health kinds (SPEC §5.1). */
-const HEALTH_KINDS = ["meal", "symptom", "visit", "lab_result"];
 
 type Candidate = { src: string; dst: string; score: number; reason: string };
 

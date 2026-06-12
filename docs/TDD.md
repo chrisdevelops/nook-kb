@@ -361,6 +361,24 @@ Contracts from issue #16 ACs over SPEC §5.3. Per §6: ordering asserted as prop
 
 **T16.7 `--human`.** Markdown, not JSON, naming title, due date, priority, status, and project scope.
 
+### Item 17 — `report health-correlations` (Phase 3)
+
+Contracts from issue #17 ACs over SPEC §5.3. Counts are exact co-occurrence tallies, not heuristic scores, so they are contracted by value. This slice also promoted the health-kind set into the kinds registry (`KindDef.health`, exported `HEALTH_KINDS`) — one definition drives the suggester, med-adjacency, and this report — and derived the tasks report's non-terminal statuses from the registry (`nonTerminalStatuses`), and extracted the wikilink/`--project` resolution rule into `resolveNodeRef`.
+
+**T17.1 same-day counts.** Symptom occurrences × meal items tally per (symptom payload `name`, item) pair — two same-day meals sharing an item count twice; ordered total-descending (symptom, exposure ascending as tiebreaks); the response carries `windows` and a `note` labeling output co-occurrence, not causation.
+
+**T17.2 directional next-day.** A symptom on the calendar day **after** a meal counts `next-day`; a symptom the day before, or two days out, never counts. (Mutation-verified: a symmetric ABS window fails it. The suggester stays symmetric — linking is direction-free; the report is directional by §5.3.)
+
+**T17.3 shared window config.** `suggest.windows` drives the report: `["same-day"]` drops next-day pairs entirely (mutation-verified) and `windows` echoes the config — one key drives suggester and report.
+
+**T17.4 meal tags.** Meal tags correlate alongside payload items, distinguished by `via: "tag"` vs `"item"`.
+
+**T17.5 `--since`.** Validated by the shared rule (T14.10, `INVALID_ARGS` on prose); both sides of a pair must be inside the window — a meal before the cutoff with a next-day symptom after it does not count (mutation-verified on the meal-side clause).
+
+**T17.6 soft-deleted.** Deleted meals and symptoms contribute no pairs (mutation-verified).
+
+**T17.7 `--human`.** Markdown, not JSON, carrying the not-causation label, the window names, and the counted pairs.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`

@@ -7,6 +7,11 @@ export type KindDef = {
   defaultStatus: string | null;
   /** Statuses excluded from query results by default (SPEC §5.2). */
   terminalStatuses?: readonly string[];
+  /**
+   * Member of the health-kind set (SPEC §5.1/§5.3): cross-kind temporal
+   * suggestions and med-adjacency both derive from this flag.
+   */
+  health?: true;
   description: string;
   /** TypeBox payload schema — serializes directly as JSON Schema. */
   payload: TObject;

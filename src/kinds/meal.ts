@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const meal: KindDef = {
   statuses: null,
   defaultStatus: null,
+  health: true,
   description: "A meal eaten; occurred_at is when it was eaten",
   payload: Type.Object(
     {

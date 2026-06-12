@@ -1,5 +1,7 @@
 import { UserError } from "../errors";
+import { nonTerminalStatuses } from "../kinds";
 import type { Db } from "../sqlite";
+import { resolveNodeRef } from "../wikilinks";
 
 type ProjectRef = { id: string; title: string };
 
@@ -18,26 +20,16 @@ export type TasksReport = {
   tasks: TaskRow[];
 };
 
-/** `--project` takes an id or an exact title (case-insensitive, live projects). */
+/** `--project`: the wikilink resolution rule, scoped to live projects. */
 function resolveProject(db: Db, ref: string): ProjectRef {
-  const byId = db.get(
-    `SELECT id, title FROM nodes
-     WHERE id = ? AND kind = 'project' AND deleted_at IS NULL`,
-    ref
-  );
-  if (byId) return { id: byId.id as string, title: byId.title as string };
-  const byTitle = db.all(
-    `SELECT id, title FROM nodes
-     WHERE kind = 'project' AND title = ? COLLATE NOCASE AND deleted_at IS NULL`,
-    ref
-  );
-  if (byTitle.length > 1) {
+  const matches = resolveNodeRef(db, ref, "project");
+  if (matches.length > 1) {
     throw new UserError("INVALID_ARGS", `--project "${ref}" is ambiguous`);
   }
-  if (byTitle.length === 0) {
+  if (matches.length === 0) {
     throw new UserError("NOT_FOUND", `no project "${ref}"`);
   }
-  return { id: byTitle[0]!.id as string, title: byTitle[0]!.title as string };
+  return matches[0]!;
 }
 
 export function tasks(db: Db, flags: { project?: string } = {}): TasksReport {
@@ -51,19 +43,23 @@ export function tasks(db: Db, flags: { project?: string } = {}): TasksReport {
                       WHERE e.src = nodes.id AND e.rel = 'part_of' AND e.dst = ?)`;
   const scopeParams = project === null ? [] : [project.id];
 
+  // non-terminal derives from the registry, so a new task status appears
+  // here the same day query stops excluding it
+  const live = nonTerminalStatuses("task");
   // due-DATE urgency first (undated last; intra-day times never outrank
   // priority), then priority, then capture order
   const rows = db
     .all(
       `SELECT id, title, status, due_at, payload FROM nodes
        WHERE kind = 'task' AND deleted_at IS NULL
-         AND status IN ('open', 'in_progress')${scopeSql}
+         AND status IN (${live.map(() => "?").join(", ")})${scopeSql}
        ORDER BY due_at IS NULL ASC, substr(due_at, 1, 10) ASC,
                 CASE json_extract(payload, '$.priority')
                   WHEN 'high' THEN 0 WHEN 'med' THEN 1 WHEN 'low' THEN 2
                   ELSE 3
                 END ASC,
                 created_at ASC`,
+      ...live,
       ...scopeParams
     )
     .map((r) => {

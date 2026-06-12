@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const lab_result: KindDef = {
   statuses: null,
   defaultStatus: null,
+  health: true,
   description: "Lab panel with marker results and reference ranges",
   payload: Type.Object(
     {

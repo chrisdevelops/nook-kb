@@ -1,6 +1,11 @@
+import type { Config } from "../config";
 import { UserError } from "../errors";
 import type { Db } from "../sqlite";
 import { finance, renderFinanceHuman } from "./finance";
+import {
+  healthCorrelations,
+  renderHealthCorrelationsHuman,
+} from "./health-correlations";
 import { renderTasksHuman, tasks } from "./tasks";
 import { medicalHistory, renderMedicalHistoryHuman } from "./medical-history";
 
@@ -18,6 +23,7 @@ const REPORT_FLAGS: Record<string, readonly (typeof SCOPE_FLAGS)[number][]> = {
   "medical-history": ["since"],
   finance: ["month"],
   tasks: ["project"],
+  "health-correlations": ["since"],
 };
 
 /**
@@ -27,6 +33,7 @@ const REPORT_FLAGS: Record<string, readonly (typeof SCOPE_FLAGS)[number][]> = {
  */
 export function reportCommand(
   db: Db,
+  config: Config,
   name: string,
   flags: ReportFlags
 ): string {
@@ -50,6 +57,12 @@ export function reportCommand(
   if (name === "finance") {
     const data = finance(db, flags);
     return flags.human ? renderFinanceHuman(data) : JSON.stringify(data);
+  }
+  if (name === "health-correlations") {
+    const data = healthCorrelations(db, config, flags);
+    return flags.human
+      ? renderHealthCorrelationsHuman(data)
+      : JSON.stringify(data);
   }
   const data = tasks(db, flags);
   return flags.human ? renderTasksHuman(data) : JSON.stringify(data);

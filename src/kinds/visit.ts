@@ -4,6 +4,7 @@ import type { KindDef } from "./kind";
 export const visit: KindDef = {
   statuses: null,
   defaultStatus: null,
+  health: true,
   description: "Doctor/provider visit; occurred_at is when attended",
   payload: Type.Object(
     {
