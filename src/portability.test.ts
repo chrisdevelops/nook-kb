@@ -67,6 +67,7 @@ describe("Item 9 — stats / export / import / backup", () => {
       imported: 8,
       skipped: 0,
       edges_skipped: 0,
+      suggestions_skipped: 0,
     });
 
     const [a, b] = await Promise.all([
@@ -121,8 +122,107 @@ describe("Item 9 — stats / export / import / backup", () => {
       imported: 1,
       skipped: 0,
       edges_skipped: 1,
+      suggestions_skipped: 0,
     });
     expect((await runCommand(["get", testId(50)], ctx)).exitCode).toBe(0);
+  });
+
+  it("T9.2c suggestion state round-trips: rejected pairs never re-propose on the copy", async () => {
+    const ctx = makeTestContext();
+    await seedStandardGraph(ctx); // meal <id:6> / symptom <id:7> same day
+    await runCommand(["suggest"], ctx);
+    const pending = JSON.parse(
+      (await runCommand(["suggest", "review"], ctx)).stdout
+    ) as Array<{ src: string; dst: string }>;
+    expect(pending.length).toBeGreaterThanOrEqual(2);
+    // reject the meal↔symptom pair, leave the rest pending
+    await runCommand(["suggest", "reject", testId(6), testId(7)], ctx);
+
+    const exported = (await runCommand(["export"], ctx)).stdout;
+    const ctx2 = makeTestContext();
+    const file = `${ctx2.dbPath}.suggestions.jsonl`;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(file, exported);
+
+    const res = JSON.parse((await runCommand(["import", file], ctx2)).stdout);
+    expect(res.suggestions_skipped).toBe(0);
+
+    // pending backlog identical across the pair
+    const [a, b] = await Promise.all([
+      runCommand(["stats"], ctx),
+      runCommand(["stats"], ctx2),
+    ]);
+    expect(JSON.parse(b.stdout).suggestions_pending).toBe(
+      JSON.parse(a.stdout).suggestions_pending
+    );
+
+    // the rejected pair stays rejected: suggest on the copy never re-proposes it
+    await runCommand(["suggest"], ctx2);
+    const copyPending = JSON.parse(
+      (await runCommand(["suggest", "review"], ctx2)).stdout
+    ) as Array<{ src: string; dst: string }>;
+    const pair = copyPending.find(
+      (s) => s.src === testId(6) && s.dst === testId(7)
+    );
+    expect(pair).toBeUndefined();
+  });
+
+  it("T9.2d dangling suggestion is skipped and counted; partial exports omit cross-set suggestions", async () => {
+    const ctx = makeTestContext();
+    const file = `${ctx.dbPath}.dangling-suggestion.jsonl`;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(
+      file,
+      [
+        JSON.stringify({
+          node: {
+            id: testId(60),
+            kind: "note",
+            title: "lonely endpoint",
+            body: "",
+            payload: {},
+            status: null,
+            occurred_at: null,
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:00:00.000Z",
+            deleted_at: null,
+          },
+          edges_out: [],
+          tags: [],
+        }),
+        JSON.stringify({
+          suggestion: {
+            src: testId(60),
+            dst: testId(99), // absent from file and DB
+            score: 1,
+            reason: "temporal-proximity:same-day",
+            status: "rejected",
+            created_at: "2026-01-01T00:00:00.000Z",
+          },
+        }),
+      ].join("\n")
+    );
+
+    const res = JSON.parse((await runCommand(["import", file], ctx)).stdout);
+    expect(res).toEqual({
+      imported: 1,
+      skipped: 0,
+      edges_skipped: 0,
+      suggestions_skipped: 1,
+    });
+
+    // a kind-filtered export carries no suggestion whose other endpoint is outside the set
+    const ctx2 = makeTestContext();
+    await seedStandardGraph(ctx2);
+    await runCommand(["suggest"], ctx2); // meal↔symptom pair exists
+    const partial = (await runCommand(["export", "--kind", "meal"], ctx2))
+      .stdout;
+    const partialLines = partial
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(partialLines).toHaveLength(1);
+    expect(partialLines[0].suggestion).toBeUndefined();
   });
 
   it("T9.3 re-import skips existing wholly", async () => {
@@ -138,6 +238,7 @@ describe("Item 9 — stats / export / import / backup", () => {
       imported: 0,
       skipped: 8,
       edges_skipped: 0,
+      suggestions_skipped: 0,
     });
   });
 

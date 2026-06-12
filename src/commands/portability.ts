@@ -28,41 +28,58 @@ export function exportCommand(db: Db, args: ExportArgs): string {
      FROM nodes WHERE ${where.join(" AND ")} ORDER BY id`,
     ...params
   );
-  return rows
-    .map((row) =>
-      JSON.stringify({
-        node: { ...row, payload: JSON.parse(row.payload as string) },
-        edges_out: db.all(
-          "SELECT dst, rel, weight, origin, created_at FROM edges WHERE src = ? ORDER BY rowid",
-          row.id
-        ),
-        tags: nodeTags(db, row.id as string),
-      })
-    )
-    .join("\n");
+  const lines = rows.map((row) =>
+    JSON.stringify({
+      node: { ...row, payload: JSON.parse(row.payload as string) },
+      edges_out: db.all(
+        "SELECT dst, rel, weight, origin, created_at FROM edges WHERE src = ? ORDER BY rowid",
+        row.id
+      ),
+      tags: nodeTags(db, row.id as string),
+    })
+  );
+
+  // suggestion rows (all statuses — rejected pairs must never re-propose
+  // after a migration, SPEC §3.1), only when both endpoints are exported
+  const exportedIds = new Set(rows.map((r) => r.id as string));
+  for (const s of db.all(
+    `SELECT src, dst, score, reason, status, created_at
+     FROM link_suggestions ORDER BY src, dst`
+  )) {
+    if (!exportedIds.has(s.src as string) || !exportedIds.has(s.dst as string))
+      continue;
+    lines.push(JSON.stringify({ suggestion: s }));
+  }
+  return lines.join("\n");
 }
 
 type ExportLine = {
-  node: Record<string, unknown>;
-  edges_out: Record<string, unknown>[];
-  tags: string[];
+  node?: Record<string, unknown>;
+  edges_out?: Record<string, unknown>[];
+  tags?: string[];
+  suggestion?: Record<string, unknown>;
 };
 
 /**
- * Two passes inside one transaction (SPEC §6): all nodes, then all
- * edges/tags — in-file order never matters. Lines whose id already exists
- * are skipped wholly; edges with a missing endpoint are skipped and
- * counted, never an error.
+ * Passes inside one transaction (SPEC §6): all nodes, then all edges/tags,
+ * then suggestion rows — in-file order never matters. Lines whose id (or
+ * suggestion pair) already exists are skipped wholly; edges and suggestions
+ * with a missing endpoint are skipped and counted, never an error.
  */
 export function importCommand(db: Db, file: string): unknown {
-  const lines: ExportLine[] = readFileSync(file, "utf8")
+  const allLines: ExportLine[] = readFileSync(file, "utf8")
     .split("\n")
     .filter((l) => l.trim() !== "")
     .map((l) => JSON.parse(l));
+  const lines = allLines.filter(
+    (l): l is Required<Omit<ExportLine, "suggestion">> => l.node !== undefined
+  );
+  const suggestionLines = allLines.filter((l) => l.suggestion !== undefined);
 
   let imported = 0;
   let skipped = 0;
   let edgesSkipped = 0;
+  let suggestionsSkipped = 0;
 
   db.exec("BEGIN");
   try {
@@ -125,13 +142,44 @@ export function importCommand(db: Db, file: string): unknown {
         );
       }
     }
+    // third pass: suggestion rows — endpoints must exist, pairs never overwrite
+    for (const line of suggestionLines) {
+      const s = line.suggestion!;
+      const endpointsExist =
+        db.get("SELECT 1 AS x FROM nodes WHERE id = ?", s.src) &&
+        db.get("SELECT 1 AS x FROM nodes WHERE id = ?", s.dst);
+      const pairExists = db.get(
+        "SELECT 1 AS x FROM link_suggestions WHERE src = ? AND dst = ?",
+        s.src,
+        s.dst
+      );
+      if (!endpointsExist || pairExists) {
+        suggestionsSkipped++;
+        continue;
+      }
+      db.run(
+        `INSERT INTO link_suggestions (src, dst, score, reason, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        s.src,
+        s.dst,
+        s.score,
+        s.reason,
+        s.status,
+        s.created_at
+      );
+    }
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
   }
 
-  return { imported, skipped, edges_skipped: edgesSkipped };
+  return {
+    imported,
+    skipped,
+    edges_skipped: edgesSkipped,
+    suggestions_skipped: suggestionsSkipped,
+  };
 }
 
 /**

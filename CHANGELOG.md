@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- export/import now round-trips `link_suggestions` (#18): export appends `{"suggestion": ...}` JSONL lines for every status (only pairs whose both endpoints are in the exported node set — partial exports never reference absent nodes); import restores them in a third pass, skipping rows with missing endpoints or an existing pair (`suggestions_skipped` in the response). Rejected pairs no longer re-propose after a migration — SPEC §3.1's retention promise survives export/import. SPEC §6 and TDD §2.3/T9.2 amended (T9.2c/T9.2d added).
+
 ## [0.3.0] — 2026-06-11
 
 Phase 3: reports. `mem report` with medical-history (#14), finance (#15), tasks (#16), health-correlations (#17), plus a post-review hardening commit (7-angle review, 5 confirmed findings). MINOR: all changes additive over v0.2.0.

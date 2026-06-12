@@ -306,7 +306,7 @@ mem backup [--dest <dir>] [--keep <n>]   # VACUUM INTO timestamped snapshot, rot
 
 Conventions (per cli-tool-creator): JSON to stdout, errors to stderr, exit 0/1/2, no prompts, `--human` for readable output. `--payload-merge` follows RFC 7386 merge-patch semantics: shallow merge where **null deletes the key**, then full-schema revalidation — optional payload fields are clearable, not write-once. Arg parsing via CAC (existing standard); no other runtime dependencies beyond TypeBox/AJV/CAC/ulid.
 
-`export` includes soft-deleted nodes (with their `deleted_at`) — an export is a faithful copy of everything not yet purged. `import` runs as a single transaction in two passes (all nodes, then all edges/tags), so in-file ordering never matters; an edge whose endpoint exists in neither the file nor the target DB is skipped and counted in the response (`edges_skipped`), not an error.
+`export` includes soft-deleted nodes (with their `deleted_at`) — an export is a faithful copy of everything not yet purged. It also carries `link_suggestions` rows of every status (rejected pairs must never re-propose after a migration, §3.1) as trailing `{ "suggestion": {...} }` lines, but only pairs whose both endpoints are in the exported node set — a `--kind`/`--since` partial export never references nodes it doesn't contain. `import` runs as a single transaction in three passes (all nodes, then all edges/tags, then suggestions), so in-file ordering never matters; an edge whose endpoint exists in neither the file nor the target DB is skipped and counted in the response (`edges_skipped`), not an error, and likewise a suggestion whose endpoint is absent or whose pair already has a row (`suggestions_skipped`).
 
 ### 6.1 Backups
 

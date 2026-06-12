@@ -82,8 +82,8 @@ Returned by `add`, `get`, `update`:
 | `suggest reject` | `{ "src", "dst", "status": "rejected" }` — canonical likewise |
 | `kinds` | array of `{ "kind", "statuses": [...] \| null, "default_status": <s> \| null, "payload_schema": <JSON Schema> }`; `kinds <kind>` returns the single object |
 | `stats` | `{ "nodes": { "<kind>": n, ... }, "edges": n, "tags": n, "suggestions_pending": n, "deleted": n }` — kind counts cover live nodes only; soft-deleted nodes appear solely in `deleted` |
-| `export` | JSONL to stdout: one `{ "node": {...full incl. body, deleted_at...}, "edges_out": [...], "tags": [...] }` per line; soft-deleted nodes included |
-| `import` | `{ "imported": n, "skipped": n, "edges_skipped": n }` (skip = id already exists; edges_skipped = edge endpoint absent from file and target DB) |
+| `export` | JSONL to stdout: one `{ "node": {...full incl. body, deleted_at...}, "edges_out": [...], "tags": [...] }` per line; soft-deleted nodes included. Trailing `{ "suggestion": { "src", "dst", "score", "reason", "status", "created_at" } }` lines carry `link_suggestions` of every status whose both endpoints are in the exported node set *(amended for #18)* |
+| `import` | `{ "imported": n, "skipped": n, "edges_skipped": n, "suggestions_skipped": n }` (skip = id already exists; edges_skipped = edge endpoint absent from file and target DB; suggestions_skipped = suggestion endpoint absent or pair already present — never overwrites) *(amended for #18)* |
 | `backup` | `{ "path": "<dest>/memory-<iso-compact>.db", "kept": n }` |
 
 ## 3. Fixtures
@@ -245,11 +245,15 @@ All against standard graph unless noted.
 
 **T9.1 stats.** Standard graph → `nodes` counts by kind match seed exactly (e.g. `"task":2`), `edges:3`, `tags:3`, `suggestions_pending:0`.
 
-**T9.2 export/import round-trip.** Standard graph with `<id:5>` soft-deleted: `export` full → JSONL, one line per node **including the soft-deleted one** (its `deleted_at` set — export is a faithful copy of everything not yet purged). Fresh second DB: `import` that JSONL → `{"imported":8,"skipped":0,"edges_skipped":0}`; `stats` on both DBs identical; `<id:5>` is soft-deleted in the copy too; `query "safekeep"` works on the copy (FTS rebuilt on import). Import is order-independent: edges resolve in a second pass, so a node's `edges_out` may reference nodes later in the file.
+**T9.2 export/import round-trip.** Standard graph with `<id:5>` soft-deleted: `export` full → JSONL, one line per node **including the soft-deleted one** (its `deleted_at` set — export is a faithful copy of everything not yet purged). Fresh second DB: `import` that JSONL → `{"imported":8,"skipped":0,"edges_skipped":0,"suggestions_skipped":0}`; `stats` on both DBs identical; `<id:5>` is soft-deleted in the copy too; `query "safekeep"` works on the copy (FTS rebuilt on import). Import is order-independent: edges resolve in a second pass, so a node's `edges_out` may reference nodes later in the file. *(Response shape amended for #18.)*
 
 **T9.2b dangling edge skipped.** Hand-craft a JSONL line whose `edges_out` references an id absent from both the file and the target DB → import succeeds, `edges_skipped:1`, the node itself imported.
 
-**T9.3 import skips existing.** Import same file again → `{"imported":0,"skipped":8,"edges_skipped":0}`.
+**T9.2c suggestion round-trip (#18).** Seeded graph with a pending backlog and one rejected pair: export → import to a fresh DB → `suggestions_skipped:0`, `stats.suggestions_pending` identical across the pair, and re-running `suggest` on the copy never re-proposes the rejected pair (§3.1's retention promise survives migration).
+
+**T9.2d dangling suggestion skipped (#18).** A `{ "suggestion": ... }` line whose endpoint is absent from file and target DB → import succeeds, `suggestions_skipped:1`. A `--kind` partial export carries no suggestion whose other endpoint falls outside the exported set (mutation-verified on the export filter).
+
+**T9.3 import skips existing.** Import same file again → `{"imported":0,"skipped":8,"edges_skipped":0,"suggestions_skipped":0}`.
 
 **T9.4 export filters.** `export --kind meal` → exactly one line.
 
