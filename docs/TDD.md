@@ -411,6 +411,20 @@ Contracts from issue #21 ACs over SPEC §4.1 and ADR-0001. The kind exists so ne
 
 **T19.3 not a health kind.** A same-day meal↔measurement pair is never proposed by `suggest`, and a note linked to a measurement node is not med-adjacent (absence assertions per §6; mutation-verified: adding `health: true` to the kind fails it). ADR-0001: scalars earn insight through trends, not proximity.
 
+### Item 20 — `medication` kind + occurred_at mirror generalization (post-v0.4.0)
+
+Contracts from issue #22 ACs over SPEC §4.1 and the §3.1 mirror invariant. The event-only mirror became a `KindDef.occurredAtSource` declaration (event → `starts_at`, medication → `started_at`) — add/update derive the guard and the mirror from it; all event Item 5/6 contracts pin the generalization didn't drift.
+
+**T20.1 round-trip.** Full payload adds with default status `active`; `occurred_at` mirrors `started_at`; `kinds medication` shows the vocabulary and `required: ["name"]`.
+
+**T20.2 no second knob.** `--occurred-at` on medication add or update is `INVALID_ARGS`.
+
+**T20.3 mirror takeover.** Without `started_at`, `occurred_at` is null (created_at fallback = add-time); a merge that first sets `started_at` fires the mirror; a later correction re-fires it (mutation-verified: an event-only update mirror fails it).
+
+**T20.4 health enrollment.** A same-day medication↔symptom temporal pair is proposed (the side-effect signal) and a note linked to a medication is med-adjacent.
+
+**T20.5 stopped is not terminal.** A `stopped` regimen stays in plain `query` listings — lifecycle preserves *that* it ended without hiding it (mutation-verified: `terminalStatuses: ["stopped"]` fails it); unknown statuses are `INVALID_STATUS`.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`

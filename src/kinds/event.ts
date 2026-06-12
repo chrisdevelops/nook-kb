@@ -5,6 +5,7 @@ export const event: KindDef = {
   statuses: ["planned", "done", "cancelled"],
   defaultStatus: "planned",
   terminalStatuses: ["cancelled"],
+  occurredAtSource: "starts_at",
   description:
     "Calendar-ish event; occurred_at mirrors starts_at (CLI invariant)",
   payload: Type.Object(

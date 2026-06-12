@@ -4,6 +4,8 @@
 
 ### Added
 
+- New kind `medication` (#22): statusful regimen (`active|stopped`, default `active`, stopped stays retrieval-visible), payload `{name, dose?, prescriber?, started_at?, stopped_at?}`, health-flagged. The event-only `occurred_at = starts_at` invariant generalized to a per-kind `KindDef.occurredAtSource` declaration; medication mirrors `started_at` (optional: null until first set, then the mirror owns it; `--occurred-at` is `INVALID_ARGS`) so back-filled regimens land at the right point in time for the proximity channel by construction (TDD Item 20). MINOR: additive.
+
 - New kind `measurement` (#21): generic point-in-time scalar readings `{metric, value, unit}`, all required — metric is canonical lowercase vocabulary (water, weight), so new scalars never need a code change; unit is required so no historical reading is ambiguous. Deliberately **not** health-flagged (ADR-0001): daily readings are proximate to everything, so the temporal channel would carry no signal; scalars correlate via trends, not link suggestions (negative contract pinned, TDD Item 19). MINOR: additive.
 
 - New kinds `mood`, `sleep`, `activity` (#20): statusless, health-flagged wellness captures per SPEC §4.1 Wellness conventions and ADR-0001. Mood is a 1–5 valence rating plus feeling labels; sleep is duration + optional quality/bed/wake with `occurred_at` = wake time by convention; activity is a canonical-name session with optional duration/distance/effort/enjoyment/weather/location. All three join the health-kind set: the suggester's cross-kind temporal channel and medical-history med-adjacency pick them up via `KindDef.health` (TDD Item 18). The shared 1–5 scale grammar is extracted as `scale1to5`. MINOR: additive.

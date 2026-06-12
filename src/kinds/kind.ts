@@ -21,6 +21,13 @@ export type KindDef = {
    * suggestions and med-adjacency both derive from this flag.
    */
   health?: true;
+  /**
+   * Payload time field mirrored into occurred_at as a CLI invariant
+   * (SPEC §3.1): applied on add, re-fired on updates that change it;
+   * --occurred-at on such kinds is INVALID_ARGS. If the field is optional
+   * and absent, occurred_at stays null (created_at fallback = add-time).
+   */
+  occurredAtSource?: string;
   description: string;
   /** TypeBox payload schema — serializes directly as JSON Schema. */
   payload: TObject;

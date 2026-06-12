@@ -73,16 +73,19 @@ export function addCommand(
   const payloadValue = parsePayload(args.payload);
   validatePayload(args.kind, payloadValue);
 
-  // Event invariant (SPEC §3.1): occurred_at = starts_at, no second knob
+  // Mirror invariant (SPEC §3.1): occurred_at = payload time field, no second knob
   let occurredAt = args.occurredAt ?? null;
-  if (args.kind === "event") {
+  if (def.occurredAtSource) {
     if (args.occurredAt !== undefined) {
       throw new UserError(
         "INVALID_ARGS",
-        "events derive occurred_at from starts_at; --occurred-at is not allowed"
+        `${args.kind}s derive occurred_at from ${def.occurredAtSource}; --occurred-at is not allowed`
       );
     }
-    occurredAt = (payloadValue as { starts_at: string }).starts_at;
+    occurredAt =
+      ((payloadValue as Record<string, unknown>)[def.occurredAtSource] as
+        | string
+        | undefined) ?? null;
   }
 
   const id = ctx.generateId();
