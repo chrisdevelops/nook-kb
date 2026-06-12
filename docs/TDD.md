@@ -305,6 +305,8 @@ Per §6: candidate presence/absence and lifecycle only — never score values.
 
 **T13.7 reject.** With reversed arguments: row rejected; re-running `suggest` never re-proposes the pair in either direction; no edge appears.
 
+**T13.8 corpus-saturated terms (#19).** A title term present in more than the document-frequency ceiling — `max(20, 10% of live non-chunk nodes)` — carries no similarity signal: a corpus whose titles share only such blanket words yields `created:0`. (The ceiling is what makes the channel scale: without it, universal words force a quadratic candidate set no implementation can compute quickly. Measured on the #19 synthetic baseline: 126.5s → 0.50s at 5k nodes.)
+
 ### Item 14 — `report medical-history` (Phase 3)
 
 Contracts from issue #14 ACs over SPEC §5.3. Per §6: ordering properties and presence/absence only. The trend label is deterministic (first vs last recorded severity), so it is contracted by value. Note: every kind this report reads (`visit`, `symptom`, `lab_result`, `note`) is status-less, so §5.2's closed-nodes-visible-to-reports rule is vacuous here — lifecycle coverage is soft-delete only.

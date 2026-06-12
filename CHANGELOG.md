@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Suggester FTS-similarity channel no longer scales quadratically (#19): one FTS probe per **distinct** title term (was one per node × term), each bounded by a document-frequency ceiling — a term in more than max(20, 10% of live non-chunk nodes) documents is corpus noise, not similarity (new contract T13.8; SPEC §5.1 amended). Measured on the issue's synthetic baseline: `mem suggest` 16.6s → 0.12s at 2k nodes, 126.5s → 0.50s at 5k, 1.62s at 10k (previously unmeasurable). Candidate-set parity verified on a sub-ceiling fixture; all existing Item 13 contracts unchanged.
+
 - export/import now round-trips `link_suggestions` (#18): export appends `{"suggestion": ...}` JSONL lines for every status (only pairs whose both endpoints are in the exported node set — partial exports never reference absent nodes); import restores them in a third pass, skipping rows with missing endpoints or an existing pair (`suggestions_skipped` in the response). Rejected pairs no longer re-propose after a migration — SPEC §3.1's retention promise survives export/import. SPEC §6 and TDD §2.3/T9.2 amended (T9.2c/T9.2d added).
 
 ## [0.3.0] — 2026-06-11

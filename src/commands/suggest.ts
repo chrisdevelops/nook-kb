@@ -71,7 +71,9 @@ function ftsSimilarityCandidates(db: Db): Candidate[] {
     `SELECT id, title FROM nodes
      WHERE deleted_at IS NULL AND kind != 'chunk' ORDER BY id`
   );
-  const termsByPair = new Map<string, Set<string>>();
+  // invert to one FTS probe per DISTINCT term (#19): hot terms shared by
+  // many titles previously re-ran the same query once per anchor
+  const anchorsByTerm = new Map<string, string[]>();
   for (const n of nodes) {
     const terms = new Set(
       ((n.title as string).toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).slice(
@@ -80,17 +82,31 @@ function ftsSimilarityCandidates(db: Db): Candidate[] {
       )
     );
     for (const term of terms) {
-      const matches = db.all(
-        `SELECT n2.id FROM nodes_fts
-         JOIN nodes n2 ON n2.id = nodes_fts.node_id
-         WHERE nodes_fts MATCH ? AND n2.id != ?
-           AND n2.deleted_at IS NULL AND n2.kind != 'chunk'`,
-        `"${term}"`,
-        n.id
-      );
+      const anchors = anchorsByTerm.get(term) ?? [];
+      anchors.push(n.id as string);
+      anchorsByTerm.set(term, anchors);
+    }
+  }
+
+  // a term in more than this many documents is corpus noise, not a
+  // similarity signal (T13.8) — and the source of the quadratic blowup
+  const dfCeiling = Math.max(20, Math.ceil(nodes.length / 10));
+  const termsByPair = new Map<string, Set<string>>();
+  for (const [term, anchors] of anchorsByTerm) {
+    const matches = db.all(
+      `SELECT n2.id FROM nodes_fts
+       JOIN nodes n2 ON n2.id = nodes_fts.node_id
+       WHERE nodes_fts MATCH ? AND n2.deleted_at IS NULL AND n2.kind != 'chunk'
+       LIMIT ?`,
+      `"${term}"`,
+      dfCeiling + 1
+    );
+    if (matches.length > dfCeiling) continue;
+    for (const anchor of anchors) {
       for (const m of matches) {
+        if (m.id === anchor) continue;
         const [src, dst] =
-          (n.id as string) < (m.id as string) ? [n.id, m.id] : [m.id, n.id];
+          anchor < (m.id as string) ? [anchor, m.id] : [m.id, anchor];
         const key = `${src}|${dst}`;
         if (!termsByPair.has(key)) termsByPair.set(key, new Set());
         termsByPair.get(key)!.add(term);

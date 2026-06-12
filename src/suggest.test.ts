@@ -318,4 +318,22 @@ describe("Item 13 — suggester (suggest / review / accept / reject)", () => {
     expect(edges.out).toEqual([]);
     expect(edges.in).toEqual([]);
   });
+
+  it("T13.8 corpus-saturated title terms carry no similarity signal (#19)", async () => {
+    const ctx = makeTestContext();
+    // 25 notes whose only shared words blanket the whole corpus: a term in
+    // (almost) every title is a stopword for similarity, not a connection
+    for (let i = 0; i < 25; i++) {
+      const res = await runCommand(
+        ["add", "note", "--title", `standup minutes item${i}`],
+        ctx
+      );
+      expect(res.exitCode).toBe(0);
+    }
+
+    const created = JSON.parse(
+      (await runCommand(["suggest"], ctx)).stdout
+    ).created;
+    expect(created).toBe(0);
+  });
 });
