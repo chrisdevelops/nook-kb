@@ -17,6 +17,9 @@ import { visit } from "./visit";
 import { lab_result } from "./lab_result";
 import { transaction } from "./transaction";
 import { subscription } from "./subscription";
+import { mood } from "./mood";
+import { sleep } from "./sleep";
+import { activity } from "./activity";
 
 /** Explicit registry map (SPEC §4): adding a kind = new file + entry here. */
 export const KINDS: Record<string, KindDef> = {
@@ -38,6 +41,9 @@ export const KINDS: Record<string, KindDef> = {
   lab_result,
   transaction,
   subscription,
+  mood,
+  sleep,
+  activity,
 };
 
 export type { KindDef };

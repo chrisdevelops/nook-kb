@@ -385,6 +385,22 @@ Contracts from issue #17 ACs over SPEC §5.3. Counts are exact co-occurrence tal
 
 **T17.7 `--human`.** Markdown, not JSON, carrying the not-causation label, the window names, and the counted pairs.
 
+### Item 18 — wellness kinds: `mood` / `sleep` / `activity` (post-v0.4.0)
+
+Contracts from issue #20 ACs over SPEC §4.1 (Wellness conventions) and ADR-0001. Payload validation and `INVALID_STATUS` flow from the registry machinery, so per-kind tests pin the schema contracts (mutation-verified: loosening `mood.rating` to a plain number fails T18.2; removing a `health` flag fails T18.5/T18.6). The shared 1–5 scale grammar was extracted as `scale1to5` (used by symptom severity, mood rating, sleep quality, activity effort/enjoyment).
+
+**T18.1 mood round-trip.** Valid `{rating, labels}` adds; `kinds mood` shows statusless, `required: ["rating"]` — rating is the identity, a ratingless mood is just a note.
+
+**T18.2 mood validation.** `rating: 6` is `VALIDATION_FAILED` writing nothing; `--status` on mood is `INVALID_STATUS`.
+
+**T18.3 sleep.** Full payload (`duration_min`, `quality`, `bed_at`, `woke_at`) round-trips; missing `duration_min` is `VALIDATION_FAILED` naming the field.
+
+**T18.4 activity.** Full payload (name/duration/distance/effort/enjoyment/weather/location) round-trips; missing `name` is `VALIDATION_FAILED` naming the field.
+
+**T18.5 health enrollment.** Same-day cross-kind temporal pairs meal↔mood, meal↔sleep, meal↔activity are proposed by `suggest` — the three kinds join `HEALTH_KINDS` via the flag, no suggester changes.
+
+**T18.6 med-adjacency reach.** A note linked to a mood node appears in `report medical-history` notes (presence only, per §6 heuristic rules).
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`

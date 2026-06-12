@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- New kinds `mood`, `sleep`, `activity` (#20): statusless, health-flagged wellness captures per SPEC §4.1 Wellness conventions and ADR-0001. Mood is a 1–5 valence rating plus feeling labels; sleep is duration + optional quality/bed/wake with `occurred_at` = wake time by convention; activity is a canonical-name session with optional duration/distance/effort/enjoyment/weather/location. All three join the health-kind set: the suggester's cross-kind temporal channel and medical-history med-adjacency pick them up via `KindDef.health` (TDD Item 18). The shared 1–5 scale grammar is extracted as `scale1to5`. MINOR: additive.
+
 ## [0.4.0] — 2026-06-12
 
 Post-Phase-3 hardening: export/import round-trips suggestion state (#18) and the suggester's FTS-similarity channel scales (#19). MINOR: #18 adds export/response surface (`{"suggestion": ...}` lines, `suggestions_skipped`).

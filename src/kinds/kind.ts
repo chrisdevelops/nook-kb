@@ -1,4 +1,13 @@
-import type { TObject } from "@sinclair/typebox";
+import { Type, type TObject } from "@sinclair/typebox";
+
+/** The shared 1–5 scale grammar (SPEC §4.1 Wellness conventions). */
+export const scale1to5 = Type.Union([
+  Type.Literal(1),
+  Type.Literal(2),
+  Type.Literal(3),
+  Type.Literal(4),
+  Type.Literal(5),
+]);
 
 export type KindDef = {
   /** Status vocabulary, or null for statusless kinds. */

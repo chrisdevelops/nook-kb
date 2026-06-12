@@ -1,0 +1,8 @@
+# One generic `measurement` kind for scalar readings; the grammar line for wellness captures
+
+Daily wellness captures (mood, sleep, activity, water intake) needed homes. Per the kinds-vs-tags doctrine (a kind is justified only by a distinct payload shape, lifecycle, or machinery — never by topic), `mood`, `sleep`, and `activity` became dedicated kinds: each has a distinct shape (valence rating + labels; duration + quality + bed/wake; name + effort/enjoyment/distance/weather/location). Water did **not** — a scalar reading's shape is `{ metric, value, unit }` regardless of what is measured, so one generic `measurement` kind covers water now and weight, steps, caffeine later with zero new grammar. The metric name is vocabulary (a canonical lowercase payload string), not grammar. We considered four dedicated kinds (rejected: every future scalar would need a code change + release) and folding mood into `measurement` (rejected: mood carries labels and its own elicitation flow — a distinct shape).
+
+## Consequences
+
+- Kind is immutable on nodes, so moving a metric out of `measurement` into a dedicated kind later requires a data migration. The bar for doing so is the same doctrine: the metric must grow a distinct shape or machinery.
+- Health flags follow a **proximity-is-informative** test: a kind joins the suggester's temporal channel (`health: true`) only if "X happened near Y" itself carries signal. `mood`, `sleep`, `activity`, `medication` pass; `measurement` deliberately fails — daily scalar readings are proximate to everything, so co-occurrence means nothing, and flagging the kind would enroll every future metric sight unseen. Scalars earn insight through trend analysis (report work), not link suggestions.

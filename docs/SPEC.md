@@ -152,7 +152,7 @@ CREATE TABLE schema_migrations (
 Notes:
 
 - `occurred_at` vs `created_at` matters for health and finance: you log yesterday's meal today.
-- For time-anchored kinds, `occurred_at` is the canonical query timestamp: the CLI maintains `occurred_at = starts_at` for events as an **invariant** — it applies on `add` and re-fires on any update that changes `starts_at` (a rescheduled event moves with it). Passing `--occurred-at` explicitly on an event (add or update) is `INVALID_ARGS`; `starts_at` is the single source of truth. Payload time fields (`starts_at`, `ends_at`) remain detail, never promoted.
+- For time-anchored kinds, `occurred_at` is the canonical query timestamp: the CLI maintains `occurred_at = starts_at` for events and `occurred_at = started_at` for medications as an **invariant** — it applies on `add` and re-fires on any update that changes the source field (a rescheduled event moves with it; a corrected regimen start moves with it). Passing `--occurred-at` explicitly on these kinds (add or update) is `INVALID_ARGS`; the payload time field is the single source of truth. Medication's `started_at` is optional: while absent, `occurred_at` defaults to add-time; the invariant takes over the first time `started_at` is set. Payload time fields (`starts_at`, `ends_at`, `started_at`, `stopped_at`) remain detail, never promoted.
 - Soft delete keeps edges intact for audit; `mem restore <id>` reverses it (clears `deleted_at`, re-indexes). Soft-deleted nodes are otherwise immutable: `update`/`link`/`unlink`/`tag`/`untag`/`delete` against one fail `NOT_FOUND`. Rule: deleted = gone, except `get` and `restore`. `mem purge` hard-deletes nodes soft-deleted > N days (default 30) and cascades edges/tags/suggestions; purged nodes cannot be restored.
 - Rejected suggestions are retained so the suggester never re-proposes the same pair (in either direction — see the canonical `src < dst` ordering above).
 
@@ -191,7 +191,9 @@ Edges are directed; traversal treats them as bidirectional with direction availa
 
 Each kind = a TypeBox payload schema + optional status vocabulary + capture conventions. Registered in code (`src/kinds/`), one file per kind, exported from an explicit registry map (no barrel re-exports of anything else). AJV validates payloads on `add` and `update`; invalid payloads are a hard error (exit 1) with the AJV message on stderr.
 
-### 4.1 Initial kinds (v1)
+### 4.1 Kinds
+
+The launch set (v1) plus the wellness/medication kinds added after v0.4.0 (rationale: ADR-0001).
 
 | kind | status vocab | payload (TypeBox, abbreviated) |
 |---|---|---|
@@ -213,14 +215,21 @@ Each kind = a TypeBox payload schema + optional status vocabulary + capture conv
 | `lab_result` | — | `{ panel: string, results: Array<{ marker: string, value: number, unit: string, ref_low?: number, ref_high?: number }> }` |
 | `transaction` | — | `{ amount: number, currency: 'CAD', direction: 'income'\|'expense', category?: string, vendor?: string }` |
 | `subscription` | `active\|cancelled` | `{ amount: number, currency: 'CAD', cadence: 'monthly'\|'yearly', vendor: string, renews_at?: string }` |
+| `mood` | — | `{ rating: 1\|2\|3\|4\|5, labels?: string[] }` |
+| `sleep` | — | `{ duration_min: number, quality?: 1\|2\|3\|4\|5, bed_at?: string, woke_at?: string }` |
+| `activity` | — | `{ name: string, duration_min?: number, distance_km?: number, effort?: 1\|2\|3\|4\|5, enjoyment?: 1\|2\|3\|4\|5, weather?: string, location?: string }` |
+| `measurement` | — | `{ metric: string, value: number, unit: string }` |
+| `medication` | `active\|stopped` | `{ name: string, dose?: string, prescriber?: string, started_at?: string, stopped_at?: string }` |
 
-**Default statuses.** Every kind with a status vocabulary declares a default, applied on `add` when `--status` is omitted: `project → active`, `task → open`, `event → planned`, `idea → raw`, `list_item → open`, `subscription → active`. Status is therefore never null for statusful kinds; statusless kinds always have null status, and passing `--status` to one is `INVALID_STATUS`.
+**Default statuses.** Every kind with a status vocabulary declares a default, applied on `add` when `--status` is omitted: `project → active`, `task → open`, `event → planned`, `idea → raw`, `list_item → open`, `subscription → active`, `medication → active`. Status is therefore never null for statusful kinds; statusless kinds always have null status, and passing `--status` to one is `INVALID_STATUS`.
 
 Transcripts: full raw transcript lives on the `source` body if small; long transcripts are **auto-chunked by the CLI on `add`** — when a source body exceeds the chunk budget, `chunk` nodes are created (cut on paragraph/speaker-turn boundaries, greedily packed to ~3k tokens, sequential `position`) with `part_of` edges back to the source, which retains the full body. Chunk titles follow the deterministic convention `<source title> (n/total)` — self-describing in result lists and unique, so title-wikilinks stay resolvable. Both the source body and chunk bodies are FTS-indexed; query-time dedup keeps results clean (§5.2). Agents never chunk manually; the add response reports `chunks_created`.
 
 **Task scoping.** `task` nodes are personal/life tasks, cross-project commitments, and project-level milestones — things that link to people, money, health, and ideas. Fine-grained implementation tasks for code projects stay in their repo's own task system (`.claude/tasks/`); the `project` node's `repo` field is the bridge. Duplicating dev-task churn into the graph is prohibited noise.
 
 **Archival cascade.** Setting a `project` to `archived` transitions its non-terminal `part_of` tasks (`open` **and** `in_progress`) to `dropped` in the same operation (CLI-enforced); terminal tasks (`done`, `dropped`) are untouched. The cascade is one hop — direct `part_of` edges only, no transitive descent. Combined with terminal-state exclusion in `query` (§5.2), stale open tasks from dead projects cannot exist, and closed work persists for history and reports without polluting retrieval.
+
+**Wellness conventions.** All 1–5 fields share one scale grammar (1 = worst, 5 = best for `mood.rating`, `sleep.quality`, `activity.enjoyment`; 1 = lightest, 5 = heaviest for `symptom.severity`, `activity.effort`). `mood.rating` is **valence** — overall how-good-vs-bad; *which* feeling (sad, anxious) is a `labels` entry (canonical lowercase), never a different number. `sleep.occurred_at` = wake time, attributing the night to the morning it ends — adjacent to the day it affects in the temporal channel. `activity.name` and `measurement.metric` are canonical lowercase free strings (vocabulary discipline via the capture skill, like meal items); `measurement.unit` is required so no reading is ever ambiguous; `measurement.occurred_at` = reading time. `medication` is one node per regimen — doses taken are never nodes; a dose change updates the node (or stop + new node when the history matters). Health flags: `mood`, `sleep`, `activity`, `medication` are health kinds; `measurement` deliberately is **not** — scalar readings recur daily, so proximity to anything carries no signal; scalars earn insight through trend analysis, not link suggestions (ADR-0001).
 
 ### 4.2 Adding a kind
 
@@ -264,7 +273,7 @@ The compounding property: seeds are roughly stable over time, but expansion reac
 
 `mem report <name>` runs named SQL over the store, JSON or `--human` markdown:
 
-- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor. Med-adjacent: a note with an edge (either direction) to a live health-kind node (meal/symptom/visit/lab_result — the §5.1 set) or a `health`/`health/…` tag (case-sensitive, like all tag matching). `--since` must be an ISO date or timestamp.
+- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor. Med-adjacent: a note with an edge (either direction) to a live health-kind node (the §5.1 set: meal/symptom/visit/lab_result/mood/sleep/activity/medication) or a `health`/`health/…` tag (case-sensitive, like all tag matching). `--since` must be an ISO date or timestamp.
 - `finance [--month]` — income vs expenses by category, subscription roll-up with projected monthly burn. `--month` (YYYY-MM) scopes transactions to the calendar month (occurred_at falling back to created_at); the subscription roll-up always reflects current state. Uncategorized transactions bucket as `uncategorized`; cancelled subscriptions are excluded from the burn but stay listed; yearly cadences normalize as amount/12.
 - `tasks [--project]` — open/in-progress ordered by due date (the calendar date of `due_at`; undated last) then priority (high > med > low, missing last). `--project` accepts a project id or exact title (case-insensitive, live projects; ambiguous title is an error) and scopes via `part_of` edges; rows carry their live `part_of` projects.
 - `health-correlations [--since]` — co-occurrence counts between symptom kinds and meal items/tags within configurable windows (`suggest.windows`, §2.1 — shared with the suggester; default same-day and next-day). Windows are directional here: same-day is the same calendar date, next-day is the symptom on the calendar day **after** the meal — a symptom preceding a meal never counts toward it (the suggester stays symmetric; linking is direction-free). `--since` (ISO, validated) applies to both sides of a pair. Output is explicitly labeled co-occurrence, not causation; agents interpret.

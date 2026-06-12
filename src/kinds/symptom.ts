@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { KindDef } from "./kind";
+import { scale1to5, type KindDef } from "./kind";
 
 export const symptom: KindDef = {
   statuses: null,
@@ -9,15 +9,7 @@ export const symptom: KindDef = {
   payload: Type.Object(
     {
       name: Type.String(),
-      severity: Type.Optional(
-        Type.Union([
-          Type.Literal(1),
-          Type.Literal(2),
-          Type.Literal(3),
-          Type.Literal(4),
-          Type.Literal(5),
-        ])
-      ),
+      severity: Type.Optional(scale1to5),
       duration_min: Type.Optional(Type.Number()),
     },
     { additionalProperties: false }
