@@ -24,6 +24,7 @@ const ALL_KINDS = [
   "mood",
   "sleep",
   "activity",
+  "measurement",
 ];
 
 describe("Item 3 — kind registry", () => {

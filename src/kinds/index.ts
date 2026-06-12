@@ -20,6 +20,7 @@ import { subscription } from "./subscription";
 import { mood } from "./mood";
 import { sleep } from "./sleep";
 import { activity } from "./activity";
+import { measurement } from "./measurement";
 
 /** Explicit registry map (SPEC §4): adding a kind = new file + entry here. */
 export const KINDS: Record<string, KindDef> = {
@@ -44,6 +45,7 @@ export const KINDS: Record<string, KindDef> = {
   mood,
   sleep,
   activity,
+  measurement,
 };
 
 export type { KindDef };

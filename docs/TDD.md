@@ -401,6 +401,16 @@ Contracts from issue #20 ACs over SPEC §4.1 (Wellness conventions) and ADR-0001
 
 **T18.6 med-adjacency reach.** A note linked to a mood node appears in `report medical-history` notes (presence only, per §6 heuristic rules).
 
+### Item 19 — `measurement` kind (post-v0.4.0)
+
+Contracts from issue #21 ACs over SPEC §4.1 and ADR-0001. The kind exists so new scalar metrics never require new grammar; its defining contract is partly negative.
+
+**T19.1 round-trip.** `{metric, value, unit}` adds; `kinds measurement` shows statusless with all three properties required.
+
+**T19.2 required unit.** A unitless reading is `VALIDATION_FAILED` naming `unit`, writing nothing (mutation-verified: making `unit` optional fails it); `--status` is `INVALID_STATUS`.
+
+**T19.3 not a health kind.** A same-day meal↔measurement pair is never proposed by `suggest`, and a note linked to a measurement node is not med-adjacent (absence assertions per §6; mutation-verified: adding `health: true` to the kind fails it). ADR-0001: scalars earn insight through trends, not proximity.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`
