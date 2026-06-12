@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-12
+
+Post-Phase-3 hardening: export/import round-trips suggestion state (#18) and the suggester's FTS-similarity channel scales (#19). MINOR: #18 adds export/response surface (`{"suggestion": ...}` lines, `suggestions_skipped`).
+
 ### Fixed
 
 - Suggester FTS-similarity channel no longer scales quadratically (#19): one FTS probe per **distinct** title term (was one per node × term), each bounded by a document-frequency ceiling — a term in more than max(20, 10% of live non-chunk nodes) documents is corpus noise, not similarity (new contract T13.8; SPEC §5.1 amended). Measured on the issue's synthetic baseline: `mem suggest` 16.6s → 0.12s at 2k nodes, 126.5s → 0.50s at 5k, 1.62s at 10k (previously unmeasurable). Candidate-set parity verified on a sub-ceiling fixture; all existing Item 13 contracts unchanged.
