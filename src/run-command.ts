@@ -18,6 +18,7 @@ import {
   importCommand,
 } from "./commands/portability";
 import { statsCommand } from "./commands/stats";
+import { reportCommand } from "./reports";
 import {
   suggestAcceptCommand,
   suggestCommand,
@@ -313,6 +314,22 @@ export async function runCommand(
           limit: parseLimit(opts.limit),
         })
       )();
+    });
+  cli
+    .command("report <name>", "named report over the store")
+    .option("--since <iso>", "occurred_at/created_at lower bound")
+    .option("--human", "markdown output")
+    .action((name: string, opts: { since?: string; human?: boolean }) => {
+      const db = openStore(ctx.dbPath, ctx.clock);
+      try {
+        // reportCommand renders its own output (JSON or --human markdown)
+        stdout = reportCommand(db, name, {
+          since: opts.since,
+          human: opts.human,
+        });
+      } finally {
+        db.close();
+      }
     });
   cli
     .command("kinds [kind]", "contract self-discovery")

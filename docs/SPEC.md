@@ -264,7 +264,7 @@ The compounding property: seeds are roughly stable over time, but expansion reac
 
 `mem report <name>` runs named SQL over the store, JSON or `--human` markdown:
 
-- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor.
+- `medical-history [--since]` — visits, symptoms grouped by name with frequency/severity trends, lab results in chronological panels, current med-adjacent notes. Designed to hand to a new doctor. Med-adjacent: a note with an edge (either direction) to a live health-kind node (meal/symptom/visit/lab_result — the §5.1 set) or a `health`/`health/…` tag.
 - `finance [--month]` — income vs expenses by category, subscription roll-up with projected monthly burn.
 - `tasks [--project]` — open/in-progress by due date and priority.
 - `health-correlations [--since]` — co-occurrence counts between symptom kinds and meal items/tags within configurable windows (`suggest.windows`, §2.1 — shared with the suggester; default same-day and next-day). Output is explicitly labeled co-occurrence, not causation; agents interpret.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `mem report` (#14): named reports over the store, JSON by default or `--human` markdown; unknown names are `INVALID_ARGS`. First report: `medical-history [--since]` — visits and lab panels in chronological order, symptoms grouped by payload name with frequency and a first-vs-last `severity_trend`, and med-adjacent notes (an edge to a live health-kind node, or a `health`/`health/…` tag — definition added to SPEC §5.3). `--since` filters every section on `occurred_at` falling back to `created_at`; soft-deleted nodes are excluded everywhere, including the adjacency hop.
+
 ## [0.2.0] — 2026-06-11
 
 Phase 2: graph retrieval. Wikilinks (#11), query expansion + related (#12), suggester (#13), plus post-review hardening. MINOR: all changes additive over v0.1.0.

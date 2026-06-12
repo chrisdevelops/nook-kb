@@ -301,6 +301,26 @@ Per §6: candidate presence/absence and lifecycle only — never score values.
 
 **T13.7 reject.** With reversed arguments: row rejected; re-running `suggest` never re-proposes the pair in either direction; no edge appears.
 
+### Item 14 — `report medical-history` (Phase 3)
+
+Contracts from issue #14 ACs over SPEC §5.3. Per §6: ordering properties and presence/absence only. The trend label is deterministic (first vs last recorded severity), so it is contracted by value. Note: every kind this report reads (`visit`, `symptom`, `lab_result`, `note`) is status-less, so §5.2's closed-nodes-visible-to-reports rule is vacuous here — lifecycle coverage is soft-delete only.
+
+**T14.1 visits.** Two visits added out of chronological order → `visits` ascending by `occurred_at` falling back to `created_at`, each row carrying `provider` plus `specialty`/`summary_outcome` (`null` when absent from the payload).
+
+**T14.2 symptom grouping.** Grouped by payload `name`, never title; groups ordered count-descending (name ascending as tiebreak); occurrences chronological with `severity:null` when unrecorded; `severity_trend` is `rising`/`falling`/`stable` comparing first vs last recorded severity, `null` with fewer than two recordings.
+
+**T14.3 labs.** `lab_result` nodes as chronological panels; `panel` and the `results` marker rows (value/unit/ref bounds) pass through intact.
+
+**T14.4 med-adjacent notes.** A note qualifies via an edge (either direction) to a **live** health-kind node (`meal`/`symptom`/`visit`/`lab_result` — the suggester's set, §5.1) or a `health`/`health/…` tag; notes with neither never appear. Output rows carry `body` (the content is the point of a doctor handover).
+
+**T14.5 `--since`.** `COALESCE(occurred_at, created_at) >= cutoff` applied to every section; symptom counts and trends reflect the filtered window only; `since` is echoed in the response (`null` without the flag).
+
+**T14.6 soft-deleted.** Excluded from every section; a note whose only health link points at a soft-deleted node is no longer med-adjacent. (Pin over clauses written alongside earlier cycles — verified by mutation: dropping the adjacency `deleted_at` guard fails it.)
+
+**T14.7 `--human`.** Markdown, not JSON: Visits / Symptoms / Lab results / Notes sections naming the underlying data.
+
+**T14.8 unknown report.** `report no-such-report` → `INVALID_ARGS`, exit 1.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`
