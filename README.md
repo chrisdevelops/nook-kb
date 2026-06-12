@@ -19,7 +19,7 @@ mem tag <id> <t>...          |   mem untag <id> <t>...
 mem delete <id>              |   mem restore <id>
 mem suggest [--limit n]      # compute link suggestions (run ad hoc or on a heartbeat)
 mem suggest review [--limit n] | mem suggest accept <src> <dst> | mem suggest reject <src> <dst>
-mem report <name> [--human]  # named summaries; medical-history [--since iso]
+mem report <name> [--human]  # medical-history [--since iso] | finance [--month yyyy-mm]
 mem kinds [kind]   # payload contracts, statuses, defaults — self-discover here
 ```
 

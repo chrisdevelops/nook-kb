@@ -318,19 +318,26 @@ export async function runCommand(
   cli
     .command("report <name>", "named report over the store")
     .option("--since <iso>", "occurred_at/created_at lower bound")
+    .option("--month <yyyy-mm>", "calendar month scope (finance)")
     .option("--human", "markdown output")
-    .action((name: string, opts: { since?: string; human?: boolean }) => {
-      const db = openStore(ctx.dbPath, ctx.clock);
-      try {
-        // reportCommand renders its own output (JSON or --human markdown)
-        stdout = reportCommand(db, name, {
-          since: opts.since,
-          human: opts.human,
-        });
-      } finally {
-        db.close();
+    .action(
+      (
+        name: string,
+        opts: { since?: string; month?: string; human?: boolean }
+      ) => {
+        const db = openStore(ctx.dbPath, ctx.clock);
+        try {
+          // reportCommand renders its own output (JSON or --human markdown)
+          stdout = reportCommand(db, name, {
+            since: opts.since,
+            month: opts.month,
+            human: opts.human,
+          });
+        } finally {
+          db.close();
+        }
       }
-    });
+    );
   cli
     .command("kinds [kind]", "contract self-discovery")
     .action((kind?: string) => {

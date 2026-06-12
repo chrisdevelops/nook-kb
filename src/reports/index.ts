@@ -1,5 +1,6 @@
 import { UserError } from "../errors";
 import type { Db } from "../sqlite";
+import { finance, renderFinanceHuman } from "./finance";
 import { medicalHistory, renderMedicalHistoryHuman } from "./medical-history";
 
 /**
@@ -9,11 +10,15 @@ import { medicalHistory, renderMedicalHistoryHuman } from "./medical-history";
 export function reportCommand(
   db: Db,
   name: string,
-  flags: { since?: string; human?: boolean }
+  flags: { since?: string; month?: string; human?: boolean }
 ): string {
   if (name === "medical-history") {
     const data = medicalHistory(db, flags);
     return flags.human ? renderMedicalHistoryHuman(data) : JSON.stringify(data);
+  }
+  if (name === "finance") {
+    const data = finance(db, flags);
+    return flags.human ? renderFinanceHuman(data) : JSON.stringify(data);
   }
   throw new UserError("INVALID_ARGS", `unknown report "${name}"`);
 }

@@ -321,6 +321,20 @@ Contracts from issue #14 ACs over SPEC §5.3. Per §6: ordering properties and p
 
 **T14.8 unknown report.** `report no-such-report` → `INVALID_ARGS`, exit 1.
 
+### Item 15 — `report finance` (Phase 3)
+
+Contracts from issue #15 ACs over SPEC §5.3. Money values are contracted exactly (cent-rounded arithmetic, not heuristic). Subscription `cancelled` is a plain status, not terminal — the report reads it directly.
+
+**T15.1 category split.** Income and expenses each total their transactions and group by payload `category` (missing → `uncategorized`), ordered total-descending (category ascending as tiebreak); `net = income.total − expenses.total`.
+
+**T15.2 `--month`.** `YYYY-MM` scopes transactions to the calendar month of `occurred_at` falling back to `created_at`; `month` echoed (`null` without the flag); empty directions yield `total: 0` and `by_category: []`; malformed values (`2026-13`, `2026-3`, a full date, prose) → `INVALID_ARGS`.
+
+**T15.3 subscription burn.** `monthly_burn` sums **active** subscriptions' `monthly_equivalent` (monthly = amount; yearly = amount/12, cent-rounded); cancelled subscriptions are excluded from the burn but stay in `items` with their status; items order active-first, then monthly_equivalent descending (vendor as tiebreak). The roll-up reflects current state — `--month` never filters it.
+
+**T15.4 soft-deleted.** Deleted transactions and subscriptions appear nowhere — totals, categories, burn, items. (Pin — verified by mutation: dropping the subscription `deleted_at` guard fails it.)
+
+**T15.5 `--human`.** Markdown, not JSON: Income / Expenses / Subscriptions sections naming categories, vendors, and the month scope.
+
 ## 5. Pure-Function Contracts
 
 ### 5.1 Chunker — `chunkTranscript(body: string, budgetTokens?: number) → Chunk[]`
