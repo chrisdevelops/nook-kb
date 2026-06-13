@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-13
+
+Wellness & medication kinds: five new kinds for daily health capture — `mood`, `sleep`, `activity` (#20), `measurement` (#21), and `medication` (#22). The event-only `occurred_at` mirror generalized to a declarative `KindDef.occurredAtSource`. First repo ADR (ADR-0001: the measurement-kind grammar line and the proximity-is-informative health-flag test). MINOR: all changes additive over v0.4.0.
+
 ### Added
 
 - New kind `medication` (#22): statusful regimen (`active|stopped`, default `active`, stopped stays retrieval-visible), payload `{name, dose?, prescriber?, started_at?, stopped_at?}`, health-flagged. The event-only `occurred_at = starts_at` invariant generalized to a per-kind `KindDef.occurredAtSource` declaration; medication mirrors `started_at` (optional: null until first set, then the mirror owns it; `--occurred-at` is `INVALID_ARGS`) so back-filled regimens land at the right point in time for the proximity channel by construction (TDD Item 20). MINOR: additive.
