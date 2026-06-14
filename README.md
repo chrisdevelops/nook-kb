@@ -4,6 +4,19 @@ One SQLite-backed memory layer shared by every agent on this machine. JSON to st
 
 **Capture discipline: search before you add; always link what you add.**
 
+## Install
+
+Requires [Bun](https://bun.sh) (>= 1.2) on the target machine:
+
+```sh
+bun install --global github:chrisdevelops/nook-kb
+```
+
+This links a `mem` command into `~/.bun/bin` (`%USERPROFILE%\.bun\bin` on
+Windows) — make sure that's on your PATH. Works on macOS, Linux, and Windows.
+See [docs/install.md](docs/install.md) for pinned installs, local-dev linking,
+data locations, and troubleshooting.
+
 ```
 mem query [text] [--kind k]... [--tag t]... [--status s] [--since iso] [--until iso]
           [--hops 1..3] [--limit n] [--include-closed] [--human]
