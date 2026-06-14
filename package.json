@@ -3,6 +3,14 @@
   "version": "0.5.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "README.md"
+  ],
   "bin": {
     "mem": "src/index.ts"
   },
@@ -12,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
