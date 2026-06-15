@@ -33,10 +33,12 @@ bun --version
 bun install --global github:chrisdevelops/nook-kb
 
 # pin to a released tag for a reproducible install:
-bun install --global github:chrisdevelops/nook-kb#v0.5.0
+bun install --global github:chrisdevelops/nook-kb#v0.5.1
 ```
 
-If the machine only has SSH access to the repo, use the explicit git URL:
+The `github:` shorthand fetches through the public GitHub tarball API, so it
+only works while the repo is public. For a private repo or fork, install over
+git instead (uses your SSH key / git credentials):
 
 ```sh
 bun install --global git+ssh://git@github.com/chrisdevelops/nook-kb.git
@@ -116,7 +118,7 @@ applied — that's the end-to-end proof the install is wired up correctly.
 
 ```sh
 # upgrade — re-run the global install at a newer tag
-bun install --global github:chrisdevelops/nook-kb#v0.6.0
+bun install --global github:chrisdevelops/nook-kb#v0.5.2
 
 # uninstall (your memory.db is left untouched)
 bun remove --global @nook/mem
